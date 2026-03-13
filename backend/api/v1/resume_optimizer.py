@@ -3,6 +3,7 @@
 提供简历优化服务，符合香港HR要求
 """
 
+import json
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -32,6 +33,44 @@ class OptimizeResumeResponse(BaseModel):
     optimized_data: Optional[dict] = None
 
 
+def _parse_edit_instructions(raw_value: str) -> list[dict]:
+    """Parse structured edit instructions from form payload."""
+    if not raw_value.strip():
+        return []
+
+    try:
+        parsed = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="edit_instructions 格式错误，必须是 JSON") from exc
+
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=400, detail="edit_instructions 必须是数组")
+
+    normalized: list[dict] = []
+    for index, item in enumerate(parsed):
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail=f"edit_instructions[{index}] 必须是对象")
+
+        action = str(item.get("action", "")).strip().lower()
+        target = str(item.get("target", "")).strip()
+        content = str(item.get("content", "")).strip()
+
+        if action not in {"delete", "add", "modify"}:
+            raise HTTPException(status_code=400, detail=f"edit_instructions[{index}].action 不合法")
+        if not target:
+            raise HTTPException(status_code=400, detail=f"edit_instructions[{index}].target 不能为空")
+        if action in {"add", "modify"} and not content:
+            raise HTTPException(status_code=400, detail=f"edit_instructions[{index}].content 不能为空")
+
+        normalized.append({
+            "action": action,
+            "target": target,
+            "content": content,
+        })
+
+    return normalized
+
+
 # ============================================================
 # API Endpoints
 # ============================================================
@@ -44,6 +83,8 @@ async def optimize_resume(
     linkedin_url: str = Form("", description="LinkedIn地址"),
     github_url: str = Form("", description="GitHub地址"),
     portfolio_url: str = Form("", description="个人网站/作品集地址"),
+    target_profile: str = Form("general", description="目标版本，如 general / qa / fintech / da"),
+    edit_instructions: str = Form("[]", description="结构化编辑指令 JSON"),
     additional_notes: str = Form("", description="其他补充信息"),
     current_user: dict = Depends(get_current_user)
 ):
@@ -84,6 +125,7 @@ async def optimize_resume(
         print(f"[简历优化] 永久居民: {permanent_resident}")
         print(f"[简历优化] 立即上班: {available_immediately}")
         print(f"=" * 80)
+        parsed_edit_instructions = _parse_edit_instructions(edit_instructions)
         logger.info(f"[User {username}] 开始优化简历: {resume_file.filename}")
 
         # ============================================================
@@ -155,6 +197,8 @@ async def optimize_resume(
                 linkedin_url=linkedin_url,
                 github_url=github_url,
                 portfolio_url=portfolio_url,
+                target_profile=target_profile,
+                edit_instructions=parsed_edit_instructions,
                 additional_notes=additional_notes
             )
 
@@ -245,6 +289,8 @@ async def optimize_resume(
                 linkedin_url=linkedin_url,
                 github_url=github_url,
                 portfolio_url=portfolio_url,
+                target_profile=target_profile,
+                edit_instructions=parsed_edit_instructions,
                 additional_notes=additional_notes
             )
             print(f"[步骤 6/7] ✅ 优化历史已保存")

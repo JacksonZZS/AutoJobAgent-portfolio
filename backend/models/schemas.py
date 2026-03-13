@@ -470,3 +470,85 @@ class WebPushSubscription(BaseModel):
     """Web Push 订阅信息"""
     endpoint: str = Field(..., description="推送端点")
     keys: Dict[str, str] = Field(..., description="加密密钥")
+
+
+# ============================================================
+# Market Intelligence 模型
+# ============================================================
+
+class SkillDemandItem(BaseModel):
+    """技能需求项"""
+    skill: str
+    count: int
+    category: str
+
+class SalaryDistributionItem(BaseModel):
+    """薪资分布项"""
+    job_type: str
+    min_avg: float
+    max_avg: float
+    count: int
+    currency: str = "HKD"
+
+class CompanyActivityItem(BaseModel):
+    """公司招聘活跃度项"""
+    company: str
+    count: int
+    avg_score: float = 0.0
+
+class TitleTrendItem(BaseModel):
+    """职位类型趋势项"""
+    title: str
+    count: int
+
+class LocationDistributionItem(BaseModel):
+    """地点分布项"""
+    location: str
+    count: int
+    percentage: float = 0.0
+
+class ScoreDistributionItem(BaseModel):
+    """评分分布项"""
+    range: str
+    count: int
+
+class DailyTrendItem(BaseModel):
+    """每日趋势项"""
+    date: str
+    new_jobs: int
+    avg_score: float = 0.0
+
+class SkillCountItem(BaseModel):
+    """技能计数项（用于按职位类型分组）"""
+    skill: str
+    count: int
+
+class JobTypeSkillProfile(BaseModel):
+    """职位类型技能画像"""
+    job_type: str
+    total_jobs: int
+    categories: List[Dict[str, Any]] = []
+
+class JobLevelItem(BaseModel):
+    """职级分布项"""
+    level: str
+    count: int
+
+class MarketIntelligenceResponse(BaseModel):
+    """Market Intelligence 完整响应"""
+    total_jobs_analyzed: int = 0
+    jobs_with_jd: int = 0
+    jobs_without_jd: int = 0
+    avg_score: float = 0.0
+    high_score_rate: float = 0.0
+    weekly_new: int = 0
+    skill_demand: List[SkillDemandItem] = []
+    skills_by_job_type: List[JobTypeSkillProfile] = []
+    salary_distribution: List[SalaryDistributionItem] = []
+    company_activity: List[CompanyActivityItem] = []
+    title_trends: List[TitleTrendItem] = []
+    job_level_distribution: List[JobLevelItem] = []
+    location_distribution: List[LocationDistributionItem] = []
+    score_distribution: List[ScoreDistributionItem] = []
+    daily_trends: List[DailyTrendItem] = []
+    generated_at: str = ""

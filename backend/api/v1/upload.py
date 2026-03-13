@@ -3,10 +3,11 @@
 处理简历和成绩单的上传，集成缓存检查
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from pathlib import Path
 import hashlib
 import json
+import shutil
 from typing import Optional
 from datetime import datetime
 
@@ -409,6 +410,17 @@ def save_resume_manifest(user_id: str, data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
 
+def sanitize_resume_label(label: Optional[str]) -> str:
+    """Sanitize label for filesystem use."""
+    import re
+
+    if not label:
+        return "default"
+    safe = re.sub(r'[^a-zA-Z0-9_\-]', '', label.replace(" ", "_"))
+    safe = safe.replace('..', '').strip()
+    return safe[:30] if safe else "default"
+
+
 @router.get("/resumes", response_model=ResumeListResponse)
 async def list_resumes(current_user: UserInfo = Depends(get_current_user)):
     """
@@ -485,15 +497,7 @@ async def upload_resume_with_label(
     user_upload_dir.mkdir(parents=True, exist_ok=True)
 
     # 🔴 安全修复: 清洗 label 防止路径遍历
-    import re
-    def sanitize_label(lbl: str) -> str:
-        if not lbl:
-            return "default"
-        safe = re.sub(r'[^a-zA-Z0-9_\-]', '', lbl.replace(" ", "_"))
-        safe = safe.replace('..', '').strip()
-        return safe[:30] if safe else "default"
-
-    safe_label = sanitize_label(label)
+    safe_label = sanitize_resume_label(label)
     save_filename = f"resume_{safe_label}_{resume_id}.pdf"
     save_path = user_upload_dir / save_filename
 
@@ -541,6 +545,82 @@ async def upload_resume_with_label(
 
     return MessageResponse(
         message=f"简历上传成功: {label or '默认'}",
+        status="success",
+        data={"resume_id": resume_id, "filename": save_filename}
+    )
+
+
+@router.post("/resume/save-optimized", response_model=MessageResponse)
+async def save_optimized_resume(
+    source_pdf_path: str = Form(...),
+    label: Optional[str] = Form(None),
+    is_default: bool = Form(False),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    将优化后的简历 PDF 保存到多简历管理列表。
+    """
+    import uuid
+
+    source_path = Path(source_pdf_path).resolve()
+    allowed_root = (Path("data/outputs") / current_user.username / "optimized_resumes").resolve()
+
+    if not source_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="优化后的简历文件不存在")
+
+    if not str(source_path).startswith(str(allowed_root)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="非法文件路径")
+
+    if source_path.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="仅支持保存 PDF 文件")
+
+    manifest = load_resume_manifest(str(current_user.id))
+    if len(manifest.get("resumes", [])) >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="最多只能保存 5 份简历，请删除旧简历后再保存"
+        )
+
+    user_upload_dir = UPLOAD_DIR / f"user_{current_user.id}"
+    user_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    resume_id = str(uuid.uuid4())[:8]
+    safe_label = sanitize_resume_label(label)
+    save_filename = f"resume_{safe_label}_{resume_id}.pdf"
+    save_path = user_upload_dir / save_filename
+    shutil.copy2(source_path, save_path)
+
+    with open(save_path, "rb") as f:
+        file_hash = calculate_file_hash(f.read(), current_user.id)
+
+    new_resume = {
+        "resume_id": resume_id,
+        "filename": save_filename,
+        "label": label,
+        "file_path": str(save_path.absolute()),
+        "file_hash": file_hash,
+        "is_default": is_default,
+        "uploaded_at": datetime.now().isoformat()
+    }
+
+    if "resumes" not in manifest:
+        manifest["resumes"] = []
+
+    if is_default:
+        for r in manifest["resumes"]:
+            r["is_default"] = False
+        manifest["default_resume_id"] = resume_id
+
+    manifest["resumes"].append(new_resume)
+
+    if len(manifest["resumes"]) == 1:
+        manifest["resumes"][0]["is_default"] = True
+        manifest["default_resume_id"] = resume_id
+
+    save_resume_manifest(str(current_user.id), manifest)
+
+    return MessageResponse(
+        message=f"已保存到简历库: {label or '未命名版本'}",
         status="success",
         data={"resume_id": resume_id, "filename": save_filename}
     )

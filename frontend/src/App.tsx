@@ -10,6 +10,7 @@ import StatisticsPage from './pages/StatisticsPage'
 import InterviewPrepPage from './pages/InterviewPrepPage'
 import ResumeManagerPage from './pages/ResumeManagerPage'
 import EmailSettingsPage from './pages/EmailSettingsPage'
+import MarketIntelligencePage from './pages/MarketIntelligencePage'
 import Layout from './components/layout/Layout'
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
           <Route path="interview" element={<InterviewPrepPage />} />
           <Route path="resumes" element={<ResumeManagerPage />} />
           <Route path="email-settings" element={<EmailSettingsPage />} />
+          <Route path="market-intelligence" element={<MarketIntelligencePage />} />
         </Route>
 
         {/* Fallback */}

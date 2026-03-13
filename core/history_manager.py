@@ -140,7 +140,8 @@ class HistoryManager:
         """
         return self.is_processed(job_id_or_link)
 
-    def add_job(self, link, title, company, status="processed", score=None, reason=None, resume_path=None, cl_path=None):
+    def add_job(self, link, title, company, status="processed", score=None, reason=None, resume_path=None, cl_path=None,
+                jd_content=None, location=None, salary_raw=None, extracted_skills=None, platform=None):
         """
         标记这个职位为已处理
 
@@ -149,6 +150,7 @@ class HistoryManager:
         2. 同时保存原始 URL 和清理后的 URL
         3. 立即保存到文件，防止程序崩溃导致数据丢失
         4. 🔴 新增：保存简历和求职信路径，方便面试时查看
+        5. 🔴 新增：保存 JD/技能/薪资/地点，用于 Market Intelligence 分析
 
         Args:
             link: 职位链接
@@ -159,6 +161,11 @@ class HistoryManager:
             reason: 跳过或失败的原因（可选）
             resume_path: 定制化简历 PDF 路径（可选）
             cl_path: 求职信 PDF 路径（可选）
+            jd_content: JD 全文（可选，用于市场分析）
+            location: 工作地点（可选）
+            salary_raw: 薪资原始字符串（可选）
+            extracted_skills: 提取的技能列表（可选）
+            platform: 平台名称（可选，auto-detect from link）
         """
         job_id = self.get_job_id(link)
         cleaned_link = clean_job_url(link)
@@ -183,6 +190,22 @@ class HistoryManager:
             record["resume_path"] = resume_path
         if cl_path:
             record["cl_path"] = cl_path
+
+        # 🔴 新增：Market Intelligence 字段
+        if jd_content:
+            record["jd_content"] = jd_content
+        if location:
+            record["location"] = location
+        if salary_raw:
+            record["salary_raw"] = salary_raw
+        if extracted_skills:
+            record["extracted_skills"] = extracted_skills
+        if platform:
+            record["platform"] = platform
+        elif link:
+            # Auto-detect platform from link
+            from core.market_analyzer import detect_platform
+            record["platform"] = detect_platform(link)
 
         self.history[job_id] = record
 

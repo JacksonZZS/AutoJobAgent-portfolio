@@ -11,7 +11,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 # 导入 API 路由
-from backend.api.v1 import auth, upload, analysis, jobs, history, materials, websocket, resume_optimizer, platforms, statistics, favorites, notifications, feedback, email, interview
+from backend.api.v1 import auth, upload, analysis, jobs, history, materials, websocket, resume_optimizer, platforms, statistics, favorites, notifications, feedback, email, interview, market_intelligence
 
 # 导入中间件
 from backend.middleware.cors import setup_cors
@@ -68,6 +68,7 @@ app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(email.router, prefix="/api/v1")
 app.include_router(interview.router, prefix="/api/v1")
+app.include_router(market_intelligence.router, prefix="/api/v1")
 
 outputs_dir = Path("data/outputs")
 if outputs_dir.exists():

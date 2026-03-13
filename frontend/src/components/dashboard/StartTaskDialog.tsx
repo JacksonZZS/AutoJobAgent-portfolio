@@ -15,7 +15,7 @@ interface StartTaskDialogProps {
 }
 
 export default function StartTaskDialog({ onClose }: StartTaskDialogProps) {
-  const [step, setStep] = useState<'upload' | 'analyzing' | 'confirm'>('upload')
+  const [step, setStep] = useState<'upload' | 'uploaded' | 'analyzing' | 'confirm'>('upload')
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [transcriptFile, setTranscriptFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -52,55 +52,71 @@ export default function StartTaskDialog({ onClose }: StartTaskDialogProps) {
     fetchLastUpload()
   }, [])
 
-  const handleUploadAndAnalyze = async () => {
+  const handleUploadOnly = async () => {
     if (!resumeFile) {
       setError('请先上传简历')
       return
     }
     setUploading(true)
     setError('')
-    setStep('analyzing')
 
     try {
       const resumeResult = await uploadAPI.uploadResume(resumeFile)
       setResumePath(resumeResult.file_path)
 
-      let transcriptResult = null
       if (transcriptFile) {
-        transcriptResult = await uploadAPI.uploadTranscript(transcriptFile)
+        const transcriptResult = await uploadAPI.uploadTranscript(transcriptFile)
         setTranscriptPath(transcriptResult.file_path)
       }
 
+      // Cache analysis result if available, but don't auto-trigger
       if (resumeResult.cached_analysis) {
         setAnalysisResult(resumeResult.cached_analysis)
-        setFormData({
-          keywords: resumeResult.cached_analysis.keywords || '',
-          target_count: 10,
-          company_blacklist: resumeResult.cached_analysis.blocked_companies || '',
-          title_exclusions: resumeResult.cached_analysis.title_exclusions || '',
-          score_threshold: 60
-        })
-        setStep('confirm')
-      } else {
-        const analysisData = await analysisAPI.analyzeResume({
-          resume_path: resumeResult.file_path,
-          transcript_path: transcriptResult?.file_path
-        })
-        setAnalysisResult(analysisData)
-        setFormData({
-          keywords: analysisData.keywords || '',
-          target_count: 10,
-          company_blacklist: analysisData.blocked_companies || '',
-          title_exclusions: analysisData.title_exclusions || '',
-          score_threshold: 60
-        })
-        setStep('confirm')
       }
+
+      setStep('uploaded')
     } catch (err: any) {
-      setError(err.response?.data?.detail || '上传或分析失败，请重试')
+      setError(err.response?.data?.detail || '上传失败，请重试')
       setStep('upload')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleStartAnalysis = async () => {
+    setError('')
+
+    // If we already have cached analysis, skip API call
+    if (analysisResult) {
+      setFormData({
+        keywords: analysisResult.keywords || '',
+        target_count: 10,
+        company_blacklist: analysisResult.blocked_companies || '',
+        title_exclusions: analysisResult.title_exclusions || '',
+        score_threshold: 60
+      })
+      setStep('confirm')
+      return
+    }
+
+    setStep('analyzing')
+    try {
+      const analysisData = await analysisAPI.analyzeResume({
+        resume_path: resumePath,
+        transcript_path: transcriptPath || undefined
+      })
+      setAnalysisResult(analysisData)
+      setFormData({
+        keywords: analysisData.keywords || '',
+        target_count: 10,
+        company_blacklist: analysisData.blocked_companies || '',
+        title_exclusions: analysisData.title_exclusions || '',
+        score_threshold: 60
+      })
+      setStep('confirm')
+    } catch (err: any) {
+      setError(err.response?.data?.detail || '分析失败，请重试')
+      setStep('uploaded')
     }
   }
 
@@ -139,51 +155,13 @@ export default function StartTaskDialog({ onClose }: StartTaskDialogProps) {
     setResumePath(currentResumePath)
     if (currentTranscriptPath) setTranscriptPath(currentTranscriptPath)
 
-    let analysisData = null
+    // Cache analysis if available, but don't auto-trigger
     if (lastUpload.cached_analysis) {
-      analysisData = lastUpload.cached_analysis
-    } else {
-      setStep('analyzing')
-      setError('')
-      try {
-        analysisData = await analysisAPI.analyzeResume({
-          resume_path: currentResumePath,
-          transcript_path: currentTranscriptPath || undefined
-        })
-      } catch (err: any) {
-        setError(err.response?.data?.detail || '分析失败，请重新上传')
-        setStep('upload')
-        setUseLastUpload(false)
-        return
-      }
+      setAnalysisResult(lastUpload.cached_analysis)
     }
 
-    if (analysisData) {
-      setIsSubmitting(true)
-      try {
-        const payload = {
-          keywords: analysisData.keywords || '',
-          platform: selectedPlatform,
-          target_count: 10,
-          company_blacklist: analysisData.blocked_companies
-            ? analysisData.blocked_companies.split(',').map((s: string) => s.trim())
-            : [],
-          title_exclusions: analysisData.title_exclusions
-            ? analysisData.title_exclusions.split(',').map((s: string) => s.trim())
-            : [],
-          score_threshold: 60,
-          resume_path: currentResumePath,
-          transcript_path: currentTranscriptPath || undefined
-        }
-        await jobsAPI.startTask(payload)
-        onClose()
-      } catch (err: any) {
-        setError(err.response?.data?.detail || '启动任务失败，请重试')
-        setStep('upload')
-      } finally {
-        setIsSubmitting(false)
-      }
-    }
+    // Stop at 'uploaded' step, wait for user to click "启动分析"
+    setStep('uploaded')
   }
 
   const handleClose = () => {
@@ -204,6 +182,7 @@ export default function StartTaskDialog({ onClose }: StartTaskDialogProps) {
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-sky-900 flex items-center gap-2">
               {step === 'upload' && <><Upload className="w-5 h-5" /> 上传简历</>}
+              {step === 'uploaded' && <><Sparkles className="w-5 h-5" /> 文档已就绪</>}
               {step === 'analyzing' && <><Loader2 className="w-5 h-5 animate-spin" /> AI 智能分析中...</>}
               {step === 'confirm' && <><Target className="w-5 h-5" /> 确认任务参数</>}
             </h2>
@@ -363,6 +342,22 @@ export default function StartTaskDialog({ onClose }: StartTaskDialogProps) {
             </div>
           )}
 
+          {/* Step 1.5: Uploaded - wait for user to start analysis */}
+          {step === 'uploaded' && (
+            <div className="py-8 text-center space-y-4">
+              <FileText className="w-16 h-16 text-green-500 mx-auto" />
+              <p className="text-sky-800 font-semibold text-lg">文档已上传成功</p>
+              <p className="text-sky-600 text-sm">
+                {resumePath ? resumePath.split('/').pop() : '简历已就绪'}
+                {transcriptPath && ` + ${transcriptPath.split('/').pop()}`}
+              </p>
+              {analysisResult && (
+                <p className="text-green-600 text-xs">已检测到历史分析缓存，点击下方按钮即可秒速加载</p>
+              )}
+              <p className="text-sky-500 text-sm mt-2">准备好后，点击下方「启动 AI 分析」按钮开始分析</p>
+            </div>
+          )}
+
           {/* Step 2: Analyzing */}
           {step === 'analyzing' && (
             <div className="py-12 text-center">
@@ -492,11 +487,21 @@ export default function StartTaskDialog({ onClose }: StartTaskDialogProps) {
           {step === 'upload' && (
             <button
               className="glass-button flex items-center gap-2"
-              onClick={handleUploadAndAnalyze}
+              onClick={handleUploadOnly}
               disabled={!resumeFile || uploading}
             >
-              {uploading ? '上传中...' : '下一步：AI 分析'}
+              {uploading ? '上传中...' : '上传文档'}
               <ArrowRight className="w-5 h-5" />
+            </button>
+          )}
+
+          {step === 'uploaded' && (
+            <button
+              className="glass-button flex items-center gap-2"
+              onClick={handleStartAnalysis}
+            >
+              启动 AI 分析
+              <Sparkles className="w-5 h-5" />
             </button>
           )}
 

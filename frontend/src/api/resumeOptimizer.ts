@@ -9,7 +9,15 @@ export interface OptimizeResumeRequest {
   linkedin_url?: string
   github_url?: string
   portfolio_url?: string
+  target_profile?: 'general' | 'qa' | 'fintech' | 'da'
+  edit_instructions?: ResumeEditInstruction[]
   additional_notes?: string
+}
+
+export interface ResumeEditInstruction {
+  action: 'delete' | 'add' | 'modify'
+  target: string
+  content?: string
 }
 
 export interface OptimizedResumeData {
@@ -65,6 +73,8 @@ export interface OptimizerHistoryRecord {
   linkedin_url: string
   github_url: string
   portfolio_url: string
+  target_profile?: string
+  edit_instructions?: ResumeEditInstruction[]
   additional_notes: string
   created_at: string
 }
@@ -84,6 +94,8 @@ export const resumeOptimizerAPI = {
     formData.append('linkedin_url', request.linkedin_url || '')
     formData.append('github_url', request.github_url || '')
     formData.append('portfolio_url', request.portfolio_url || '')
+    formData.append('target_profile', request.target_profile || 'general')
+    formData.append('edit_instructions', JSON.stringify(request.edit_instructions || []))
     formData.append('additional_notes', request.additional_notes || '')
 
     const response = await fetch('/api/v1/resume/optimize', {

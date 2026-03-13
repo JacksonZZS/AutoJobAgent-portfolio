@@ -25,7 +25,9 @@ import {
   Bookmark,
   UserCircle,
   Mail,
-  Settings
+  Settings,
+  TrendingUp,
+  PieChart
 } from 'lucide-react'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 
@@ -66,9 +68,12 @@ const navGroups = [
     id: 'analytics',
     label: '数据分析',
     icon: BarChart3,
-    href: '/statistics',
     color: 'from-green-600 to-emerald-500',
-    shadowColor: 'shadow-green-500/30'
+    shadowColor: 'shadow-green-500/30',
+    submenu: [
+      { id: 'statistics', label: '投递统计', href: '/statistics', icon: PieChart },
+      { id: 'market', label: '市场洞察', href: '/market-intelligence', icon: TrendingUp },
+    ]
   },
   {
     id: 'settings',

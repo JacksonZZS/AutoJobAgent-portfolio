@@ -75,6 +75,8 @@ class OptimizerHistoryManager:
         linkedin_url: str = "",
         github_url: str = "",
         portfolio_url: str = "",
+        target_profile: str = "general",
+        edit_instructions: Optional[List[Dict[str, Any]]] = None,
         additional_notes: str = ""
     ) -> None:
         """
@@ -88,6 +90,8 @@ class OptimizerHistoryManager:
             linkedin_url: LinkedIn地址
             github_url: GitHub地址
             portfolio_url: 个人网站/作品集地址
+            target_profile: 目标版本
+            edit_instructions: 结构化编辑指令
             additional_notes: 其他补充信息
         """
         record = {
@@ -100,6 +104,8 @@ class OptimizerHistoryManager:
             "linkedin_url": linkedin_url,
             "github_url": github_url,
             "portfolio_url": portfolio_url,
+            "target_profile": target_profile,
+            "edit_instructions": edit_instructions or [],
             "additional_notes": additional_notes,
             "created_at": datetime.now().isoformat()
         }

@@ -9,7 +9,8 @@ import json
 import re
 import logging
 import time
-from anthropic import Anthropic
+from difflib import SequenceMatcher
+from google import genai
 from dotenv import load_dotenv
 from datetime import datetime
 
@@ -24,17 +25,18 @@ logger = logging.getLogger(__name__)
 
 class LLMEngine:
     def __init__(self):
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        # 从 .env 读取 BASE_URL，支持多种变量名
-        # 优先级: API_BASE_URL > BASE_URL > ANTHROPIC_BASE_URL > 默认本地
-        base_url = os.getenv("API_BASE_URL") or os.getenv("BASE_URL") or os.getenv("ANTHROPIC_BASE_URL") or "http://127.0.0.1:8045"
+        # 优先读取 GOOGLE_API_KEY
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
         if not api_key:
-            raise ValueError("❌ MISSING_API_KEY: Please check your .env file.")
+            raise ValueError("❌ MISSING_API_KEY: Please check your .env file for GOOGLE_API_KEY.")
 
-        self.client = Anthropic(api_key=api_key, base_url=base_url)
-        # 建议使用稳定版本，或者你之前指定的版本
-        self.model = "gemini-3-flash"
+        # 使用官方 Google GenAI 客户端
+        self.client = genai.Client(api_key=api_key)
+        
+        # 默认使用稳定的 gemini-3-flash-preview 确保恢复成功
+        self.model = os.getenv("LLM_MODEL") or "gemini-3-flash-preview"
+        logger.info(f"🚀 LLMEngine initialized with model: {self.model}")
 
     def _clean_json_string(self, text):
         """Delegate to module-level function for backward compatibility."""
@@ -44,146 +46,671 @@ class LLMEngine:
         """Delegate to module-level function for backward compatibility."""
         return parse_json_response(text, retry_with_repair=retry_with_repair)
 
+    def _extract_contact_details(self, resume_text: str) -> dict:
+        """Extract common contact fields from raw resume text as a fallback."""
+        text = resume_text or ""
+
+        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
+
+        linkedin_match = re.search(r'(https?://[^\s]*linkedin\.com/[^\s|,;]+)', text, re.IGNORECASE)
+        github_match = re.search(r'(https?://[^\s]*github\.com/[^\s|,;]+)', text, re.IGNORECASE)
+        portfolio_match = re.search(
+            r'(https?://[^\s]+)',
+            text,
+            re.IGNORECASE,
+        )
+
+        phone_match = re.search(
+            r'(\+?\d[\d\s\-\(\)]{7,}\d)',
+            text
+        )
+
+        portfolio_url = ""
+        if portfolio_match:
+            candidate = portfolio_match.group(1)
+            if "linkedin.com" not in candidate.lower() and "github.com" not in candidate.lower():
+                portfolio_url = candidate
+
+        return {
+            "email": email_match.group(0) if email_match else "",
+            "phone": phone_match.group(1).strip() if phone_match else "",
+            "linkedin": linkedin_match.group(1) if linkedin_match else "",
+            "github": github_match.group(1) if github_match else "",
+            "portfolio": portfolio_url,
+        }
+
+    def _is_valid_url(self, value: str) -> bool:
+        """Return True only for plausible http(s) URLs."""
+        if not value or not isinstance(value, str):
+            return False
+        candidate = value.strip()
+        return bool(re.match(r"^https?://[^\s/$.?#].[^\s]*$", candidate, re.IGNORECASE))
+
+    def _normalize_text_key(self, value: str) -> str:
+        """Normalize user-visible text for fuzzy matching."""
+        if not value:
+            return ""
+        normalized = re.sub(r"[^a-z0-9]+", "", value.lower())
+        return normalized
+
+    def _should_skip_fallback_item(self, name: str, edit_instructions: list[dict]) -> bool:
+        """Honor explicit delete/modify instructions when restoring missing items."""
+        normalized_name = self._normalize_text_key(name)
+        for instruction in edit_instructions:
+            if instruction.get("action") not in {"delete", "modify"}:
+                continue
+            target = self._normalize_text_key(str(instruction.get("target", "")))
+            if target and (target in normalized_name or normalized_name in target):
+                return True
+        return False
+
+    def _merge_missing_projects(
+        self,
+        candidate_projects: list[dict],
+        extracted_projects: list[dict],
+        edit_instructions: list[dict],
+    ) -> list[dict]:
+        """Append missing original projects without overwriting AI modifications/additions."""
+        merged = list(candidate_projects or [])
+        existing_names = {
+            self._normalize_text_key(project.get("name", ""))
+            for project in merged
+            if isinstance(project, dict)
+        }
+
+        for project in extracted_projects:
+            name = project.get("name", "")
+            normalized = self._normalize_text_key(name)
+            if not normalized or normalized in existing_names:
+                continue
+            if self._should_skip_fallback_item(name, edit_instructions):
+                continue
+            merged.append(project)
+            existing_names.add(normalized)
+
+        return merged
+
+    def _project_similarity(self, left: dict, right: dict) -> float:
+        """Estimate whether two project entries refer to the same project."""
+        left_name = self._normalize_text_key(left.get("name", ""))
+        right_name = self._normalize_text_key(right.get("name", ""))
+        name_score = SequenceMatcher(None, left_name, right_name).ratio() if left_name and right_name else 0.0
+
+        left_date = self._normalize_text_key(left.get("date", ""))
+        right_date = self._normalize_text_key(right.get("date", ""))
+        same_date = bool(left_date and right_date and left_date == right_date)
+
+        left_bullets = " ".join(left.get("bullets", []) or [])
+        right_bullets = " ".join(right.get("bullets", []) or [])
+        left_tokens = {
+            token for token in re.findall(r"[A-Za-z]{3,}", left_bullets.lower())
+            if token not in {"with", "from", "that", "this", "using", "built", "developed", "designed"}
+        }
+        right_tokens = {
+            token for token in re.findall(r"[A-Za-z]{3,}", right_bullets.lower())
+            if token not in {"with", "from", "that", "this", "using", "built", "developed", "designed"}
+        }
+        overlap = len(left_tokens & right_tokens)
+
+        if name_score >= 0.82:
+            return 1.0
+        if name_score >= 0.68 and same_date:
+            return 0.95
+        if name_score >= 0.6 and overlap >= 3:
+            return 0.9
+        if same_date and overlap >= 5:
+            return 0.85
+        return max(name_score, 0.0)
+
+    def _is_truncated_bullet(self, bullet: str) -> bool:
+        """Detect obviously truncated bullet text from broken extraction/JSON repair."""
+        if not bullet:
+            return True
+        text = bullet.strip()
+        if len(text) < 12:
+            return True
+        if re.search(r'\b(and|with|for|to|of|in|via|using)\s+[a-zA-Z]$', text):
+            return True
+        if re.search(r'\b[a-zA-Z]$', text) and len(text.split()[-1]) == 1:
+            return True
+        if text.endswith((" and", " with", " for", " to", " of", " in", " via", " using")):
+            return True
+        return False
+
+    def _clean_project_bullets(self, bullets: list[str]) -> list[str]:
+        """Drop duplicates and obviously truncated bullet lines."""
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for bullet in bullets or []:
+            if not isinstance(bullet, str):
+                continue
+            value = bullet.strip()
+            if not value or self._is_truncated_bullet(value):
+                continue
+            key = self._normalize_text_key(value)
+            if key and key not in seen:
+                cleaned.append(value)
+                seen.add(key)
+        return cleaned
+
+    def _dedupe_and_merge_projects(self, projects: list[dict]) -> list[dict]:
+        """Merge duplicate project variants while preserving richer AI edits."""
+        merged: list[dict] = []
+        for project in projects or []:
+            if not isinstance(project, dict):
+                continue
+
+            project_copy = {
+                "name": project.get("name", ""),
+                "date": project.get("date", ""),
+                "bullets": self._clean_project_bullets(project.get("bullets", []) or []),
+            }
+            matched_index = None
+            for index, existing in enumerate(merged):
+                if self._project_similarity(existing, project_copy) >= 0.85:
+                    matched_index = index
+                    break
+
+            if matched_index is None:
+                merged.append(project_copy)
+                continue
+
+            existing = merged[matched_index]
+            if len(project_copy.get("name", "")) > len(existing.get("name", "")):
+                existing["name"] = project_copy["name"]
+            if len(project_copy.get("date", "")) > len(existing.get("date", "")):
+                existing["date"] = project_copy["date"]
+            existing["bullets"] = self._clean_project_bullets(
+                (existing.get("bullets", []) or []) + (project_copy.get("bullets", []) or [])
+            )
+
+        return merged
+
+    def _apply_project_edit_instruction_hints(self, projects: list[dict], edit_instructions: list[dict]) -> list[dict]:
+        """Ensure project-scoped add/modify instructions are still reflected after fallback merges."""
+        for instruction in edit_instructions:
+            action = instruction.get("action")
+            if action not in {"add", "modify"}:
+                continue
+            target = str(instruction.get("target", ""))
+            content = str(instruction.get("content", "")).strip()
+            if not target or not content:
+                continue
+
+            normalized_target = self._normalize_text_key(target)
+            applied = False
+            for project in projects:
+                name_key = self._normalize_text_key(project.get("name", ""))
+                if not name_key:
+                    continue
+                if normalized_target in name_key or name_key in normalized_target:
+                    if action == "modify":
+                        project["bullets"] = [content]
+                    else:
+                        combined = " ".join([project.get("name", "")] + (project.get("bullets", []) or []))
+                        if self._normalize_text_key(content) not in self._normalize_text_key(combined):
+                            project.setdefault("bullets", []).append(content)
+                    applied = True
+
+            if not applied and action == "add":
+                projects.append({
+                    "name": target,
+                    "date": "",
+                    "bullets": [content],
+                })
+
+        for project in projects:
+            project["bullets"] = self._clean_project_bullets(project.get("bullets", []) or [])
+        return projects
+
+    def _parse_project_from_instruction(self, target: str, content: str) -> dict:
+        """Parse a project-like block from edit instruction content."""
+        lines = [line.strip() for line in (content or "").splitlines() if line.strip()]
+        text = (content or "").strip()
+
+        name = target.strip()
+        date = ""
+        bullets: list[str] = []
+
+        if lines:
+            header = lines[0]
+            header_date_match = re.search(
+                r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(?:19|20)\d{2}\s*[–-]\s*(?:Present|Current|Now|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(?:19|20)\d{2}|(?:19|20)\d{2}))|((?:19|20)\d{2}\s*[–-]\s*(?:Present|Current|Now|(?:19|20)\d{2}))',
+                header,
+                re.IGNORECASE,
+            )
+            if header_date_match:
+                date = header_date_match.group(0)
+                possible_name = header.replace(date, "").strip(" |-–")
+                if possible_name:
+                    name = possible_name
+                lines = lines[1:]
+            elif len(lines) > 1 and not lines[0].startswith(("-", "•")):
+                possible_name = header.strip(" |-–")
+                if len(possible_name.split()) <= 12:
+                    name = possible_name
+                    lines = lines[1:]
+
+        if lines:
+            for line in lines:
+                bullet = re.sub(r'^[\-\u2022•]\s*', '', line).strip()
+                if bullet:
+                    bullets.append(bullet)
+        elif text:
+            sentence_bullets = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9])', text)
+            bullets = [bullet.strip(" -") for bullet in sentence_bullets if bullet.strip()]
+
+        if not bullets and text:
+            bullets = [text]
+
+        return {
+            "name": name,
+            "date": date,
+            "bullets": self._clean_project_bullets(bullets),
+        }
+
+    def _apply_deterministic_project_edits(self, projects: list[dict], edit_instructions: list[dict]) -> list[dict]:
+        """Apply project add/modify instructions deterministically after AI generation."""
+        result = list(projects or [])
+
+        for instruction in edit_instructions:
+            action = instruction.get("action")
+            if action not in {"add", "modify"}:
+                continue
+
+            target = str(instruction.get("target", "")).strip()
+            content = str(instruction.get("content", "")).strip()
+            if not target or not content:
+                continue
+
+            replacement = self._parse_project_from_instruction(target, content)
+            normalized_target = self._normalize_text_key(target)
+
+            matched_index = None
+            best_score = 0.0
+            for index, project in enumerate(result):
+                project_name = str(project.get("name", "")).strip()
+                project_key = self._normalize_text_key(project_name)
+                if not project_key:
+                    continue
+                score = SequenceMatcher(None, normalized_target, project_key).ratio()
+                if normalized_target in project_key or project_key in normalized_target:
+                    score = max(score, 0.95)
+                if score > best_score:
+                    best_score = score
+                    matched_index = index
+
+            if action == "modify":
+                if matched_index is not None and best_score >= 0.55:
+                    result[matched_index] = replacement
+                else:
+                    result.append(replacement)
+            elif action == "add":
+                if matched_index is None or best_score < 0.55:
+                    result.append(replacement)
+
+        return self._dedupe_and_merge_projects(result)
+
+    def _merge_missing_skills(self, candidate_skills: list[dict], extracted_skills: list[dict]) -> list[dict]:
+        """Preserve AI-generated skills and append raw-skill categories that disappeared."""
+        merged = list(candidate_skills or [])
+        existing_categories = {
+            self._normalize_text_key(skill.get("name", ""))
+            for skill in merged
+            if isinstance(skill, dict)
+        }
+
+        for skill in extracted_skills:
+            category = self._normalize_text_key(skill.get("name", ""))
+            if not category or category in existing_categories:
+                continue
+            merged.append(skill)
+            existing_categories.add(category)
+
+        return merged
+
+    def _validate_resume_result(self, result: dict, allow_missing_projects: bool = False) -> tuple[bool, str]:
+        """Reject truncated LLM outputs before PDF generation."""
+        experience = result.get("experience", [])
+        projects = result.get("projects", [])
+        education = result.get("education")
+
+        exp_count = len(experience) if isinstance(experience, list) else 0
+        proj_count = len(projects) if isinstance(projects, list) else 0
+        has_education = bool(education)
+
+        if not has_education:
+            return False, "missing education"
+        if exp_count == 0 and proj_count == 0:
+            return False, "missing both experience and projects"
+        if not allow_missing_projects and exp_count == 0:
+            return False, "missing experience"
+        return True, "ok"
+
+    def _extract_section_lines(self, resume_text: str, headings: list[str]) -> list[str]:
+        """Extract lines under a named resume section."""
+        lines = [line.strip() for line in (resume_text or "").splitlines()]
+        normalized_headings = {heading.lower() for heading in headings}
+        common_stops = {
+            "professional summary",
+            "summary",
+            "work experience",
+            "experience",
+            "projects",
+            "skills",
+            "languages",
+            "certifications",
+            "additional information",
+        }
+
+        in_section = False
+        captured: list[str] = []
+        for line in lines:
+            clean = re.sub(r"[:\-\s]+$", "", line).strip()
+            lowered = clean.lower()
+            if not clean:
+                if in_section and captured:
+                    captured.append("")
+                continue
+
+            if lowered in normalized_headings:
+                in_section = True
+                continue
+
+            if in_section and lowered in common_stops:
+                break
+
+            if in_section:
+                captured.append(clean)
+
+        return captured
+
+    def _extract_education_entries(self, resume_text: str) -> list[dict]:
+        """Best-effort extraction of education entries from raw resume text."""
+        section_lines = self._extract_section_lines(
+            resume_text,
+            ["education", "academic background", "education background"],
+        )
+        if not section_lines:
+            return []
+
+        text = "\n".join(section_lines)
+        chunks = [chunk.strip() for chunk in re.split(r"\n\s*\n", text) if chunk.strip()]
+        entries: list[dict] = []
+
+        for chunk in chunks:
+            lines = [line.strip() for line in chunk.splitlines() if line.strip()]
+            if not lines:
+                continue
+
+            university = ""
+            degree = ""
+            date = ""
+            honors = ""
+            gpa = ""
+            courses: list[dict] = []
+
+            date_match = re.search(
+                r'((?:19|20)\d{2}(?:\s*[-–]\s*(?:present|current|now|(?:19|20)\d{2}))?)',
+                chunk,
+                re.IGNORECASE,
+            )
+            if date_match:
+                date = date_match.group(1)
+
+            gpa_match = re.search(r'GPA[:\s]*([0-9.\/]+)', chunk, re.IGNORECASE)
+            if gpa_match:
+                gpa = gpa_match.group(1)
+
+            honors_match = re.search(
+                r'(First Class Honou?rs|Second Class Honou?rs|Dean\'?s List|Distinction|Merit)',
+                chunk,
+                re.IGNORECASE,
+            )
+            if honors_match:
+                honors = honors_match.group(1)
+
+            course_match = re.search(r'(?:Relevant )?Courses?[:\s]*(.+)', chunk, re.IGNORECASE)
+            if course_match:
+                raw_courses = re.split(r'[,;/|]+', course_match.group(1))
+                courses = [{"name": course.strip()} for course in raw_courses if course.strip()]
+
+            for line in lines:
+                if not university and re.search(r'(University|College|Institute|School)', line, re.IGNORECASE):
+                    university = line
+                    continue
+                if not degree and re.search(r'(Bachelor|Master|B\.?Sc|M\.?Sc|PhD|Doctor|Major|Minor)', line, re.IGNORECASE):
+                    degree = line
+
+            if not university:
+                university = lines[0]
+            if not degree and len(lines) > 1:
+                degree = lines[1]
+
+            entry = {
+                "university": university,
+                "degree": degree,
+                "date": date,
+            }
+            if honors:
+                entry["honors"] = honors
+            if gpa:
+                entry["gpa"] = gpa
+            if courses:
+                entry["courses"] = courses
+
+            if university or degree:
+                entries.append(entry)
+
+        return entries
+
+    def _extract_project_entries(self, resume_text: str) -> list[dict]:
+        """Best-effort extraction of project entries from raw resume text."""
+        section_lines = self._extract_section_lines(
+            resume_text,
+            ["projects", "project experience", "selected projects"],
+        )
+        if not section_lines:
+            return []
+
+        entries: list[dict] = []
+        current: dict | None = None
+
+        def flush_current():
+            nonlocal current
+            if current and current.get("name"):
+                current["bullets"] = [bullet for bullet in current.get("bullets", []) if bullet]
+                entries.append(current)
+            current = None
+
+        for raw_line in section_lines:
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            bullet_text = re.sub(r'^[\-\u2022•]\s*', '', line).strip()
+            is_bullet = bullet_text != line or line.startswith(("-", "•"))
+
+            # Project header heuristics: contains a date or separator and is not a bullet.
+            looks_like_header = (
+                not is_bullet and (
+                    "|" in line
+                    or "\\hfill" in line
+                    or re.search(r'(19|20)\d{2}', line)
+                )
+            )
+
+            if looks_like_header:
+                flush_current()
+                header = re.sub(r'\\hfill.*$', '', line).strip()
+                date_match = re.search(
+                    r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(?:19|20)\d{2}\s*[-–]\s*(?:Present|Current|Now|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(?:19|20)\d{2}|(?:19|20)\d{2}))|((?:19|20)\d{2}\s*[-–]\s*(?:Present|Current|Now|(?:19|20)\d{2}))',
+                    header,
+                    re.IGNORECASE,
+                )
+                date = date_match.group(0) if date_match else ""
+                name = header
+                if "|" in header:
+                    name = header.split("|", 1)[0].strip()
+                if date:
+                    name = name.replace(date, "").strip(" |-")
+                current = {
+                    "name": name,
+                    "date": date,
+                    "bullets": [],
+                }
+                continue
+
+            if current is None:
+                current = {
+                    "name": line,
+                    "date": "",
+                    "bullets": [],
+                }
+                continue
+
+            current["bullets"].append(bullet_text if is_bullet else line)
+
+        flush_current()
+        return entries
+
+    def _extract_skill_entries(self, resume_text: str) -> list[dict]:
+        """Best-effort extraction of skills section from raw resume text."""
+        section_lines = self._extract_section_lines(
+            resume_text,
+            ["skills", "technical skills", "core skills"],
+        )
+        if not section_lines:
+            return []
+
+        skills: list[dict] = []
+        uncategorized: list[str] = []
+
+        for raw_line in section_lines:
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            if ":" in line:
+                name, values = line.split(":", 1)
+                keywords = [item.strip() for item in re.split(r'[,|/;]+', values) if item.strip()]
+                if keywords:
+                    skills.append({
+                        "name": name.strip(),
+                        "keywords": keywords,
+                    })
+                continue
+
+            uncategorized.extend([item.strip() for item in re.split(r'[,|/;]+', line) if item.strip()])
+
+        if uncategorized:
+            skills.append({
+                "name": "Core Skills",
+                "keywords": uncategorized,
+            })
+
+        return skills
+
+    def _extract_languages(self, resume_text: str) -> list[str]:
+        """Best-effort extraction of language section from raw resume text."""
+        text = resume_text or ""
+        patterns = [
+            r'Languages?\s*[:|-]\s*(.+)',
+            r'语言能力\s*[:：-]\s*(.+)',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                raw = match.group(1).splitlines()[0]
+                parts = re.split(r'[,|/;]+', raw)
+                cleaned = [part.strip() for part in parts if part.strip()]
+                if cleaned:
+                    return cleaned
+
+        detected = []
+        known_languages = [
+            "English", "Chinese", "Mandarin", "Cantonese", "Japanese",
+            "Korean", "French", "German", "Spanish"
+        ]
+        lower_text = text.lower()
+        for language in known_languages:
+            if language.lower() in lower_text:
+                detected.append(language)
+
+        return detected
+
+    def _extract_work_status(self, resume_text: str) -> dict:
+        """Best-effort extraction of residency and availability from raw resume text."""
+        text = (resume_text or "").lower()
+
+        permanent_patterns = [
+            "hong kong permanent resident",
+            "hk permanent resident",
+            "permanent resident",
+            "no visa sponsorship required",
+            "no work visa required",
+        ]
+        availability_patterns = [
+            "available immediately",
+            "immediately available",
+            "available to start immediately",
+            "immediate availability",
+        ]
+
+        work_eligibility = "Hong Kong Permanent Resident" if any(
+            pattern in text for pattern in permanent_patterns
+        ) else ""
+        availability = "Available immediately" if any(
+            pattern in text for pattern in availability_patterns
+        ) else ""
+
+        return {
+            "work_eligibility": work_eligibility,
+            "availability": availability,
+        }
+
     def _call_ai(self, system_prompt, user_prompt, max_tokens=4000, prefill=None, max_retries=3, temperature=0):
         """
-        增强的 AI 调用方法，支持 JSON 解析失败时的自动重试
-
-        Args:
-            system_prompt: 系统提示词
-            user_prompt: 用户提示词
-            max_tokens: 最大 token 数
-            prefill: 强制 AI 以特定字符开头（例如 "{"），防止它说废话
-            max_retries: 遇到 429 错误或 JSON 解析失败时的最大重试次数
-            temperature: 温度参数，默认为 0（更确定性的输出）
-
-        Returns:
-            解析后的 JSON 对象，失败返回 None
+        官方 Google GenAI 调用方法
         """
-        last_raw_text = None  # 保存最后一次的原始响应，用于调试
-
-        # 🔍 添加日志
-        print(f"🔧 _call_ai called with max_tokens={max_tokens}, temperature={temperature}, prefill={prefill}")
-
         for attempt in range(max_retries):
             try:
-                messages = [{"role": "user", "content": user_prompt}]
+                # 构造官方配置
+                config = {
+                    "system_instruction": system_prompt,
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                    "response_mime_type": "application/json"
+                }
 
-                # ✅ 强力技巧：如果你传入了 prefill (比如 "{")，我们假装 AI 已经说了这个字
-                # AI 就只能接着往下填内容，没机会说 "Here is the JSON..."
-                if prefill:
-                    messages.append({"role": "assistant", "content": prefill})
+                print(f"📡 Sending request to Gemini ({self.model}, attempt {attempt + 1}/{max_retries})...")
 
-                # 如果是重试，并且之前解析失败，添加修复提示
-                if attempt > 0 and last_raw_text:
-                    logger.info(f"🔄 第 {attempt + 1} 次尝试，要求 AI 修复 JSON 格式...")
-                    print(f"🔄 Retry attempt {attempt + 1}/{max_retries}")
-                    # 在用户提示词后添加修复指令
-                    user_prompt_with_fix = f"""{user_prompt}
-
-CRITICAL: The previous response had JSON parsing errors. Please ensure:
-1. All strings are properly escaped (especially newlines and quotes)
-2. No trailing commas in objects or arrays
-3. All brackets and braces are properly closed
-4. Output ONLY valid JSON, no explanations or markdown
-5. Use double quotes for all strings, not single quotes"""
-                    messages[0]["content"] = user_prompt_with_fix
-
-                # 🔍 添加日志
-                print(f"📡 Sending request to LLM (attempt {attempt + 1}/{max_retries})...")
-
-                response = self.client.messages.create(
+                response = self.client.models.generate_content(
                     model=self.model,
-                    max_tokens=max_tokens,
-                    temperature=temperature if attempt == 0 else 0,  # 重试时强制使用 temperature=0
-                    system=system_prompt,
-                    messages=messages
+                    contents=user_prompt,
+                    config=config
                 )
 
-                # 🔍 添加日志
-                print(f"✅ Got response from LLM, processing...")
-
-                # 处理多种内容块类型（TextBlock 和 ThinkingBlock）
-                raw_text = ""
-                for block in response.content:
-                    if hasattr(block, 'text'):
-                        raw_text = block.text
-                        break  # 找到第一个文本块就停止
-
+                raw_text = response.text
                 if not raw_text:
-                    print(f"⚠️ API 响应中没有找到文本内容")
-                    logger.warning(f"⚠️ API 响应中没有找到文本内容")
-                    return None
-
-                # 如果使用了 prefill，AI 返回的内容是剩下的部分，我们要把开头补回去
-                if prefill:
-                    raw_text = prefill + raw_text
-
-                last_raw_text = raw_text  # 保存原始响应
-
-                # 🔍 添加日志：显示原始响应
-                print(f"📝 Raw response (first 500 chars):\n{raw_text[:500]}")
-
-                # ✅ 使用增强的 JSON 解析方法
-                print(f"🔍 Parsing JSON response...")
-                parsed_data = self._parse_json_response(raw_text, retry_with_repair=True)
-
-                if parsed_data is not None:
-                    if attempt > 0:
-                        logger.info(f"✅ 第 {attempt + 1} 次尝试成功解析 JSON")
-                    print(f"✅ JSON parsed successfully!")
-                    return parsed_data
-                else:
-                    # JSON 解析失败
-                    print(f"❌ JSON parsing failed!")
-                    if attempt < max_retries - 1:
-                        logger.warning(f"⚠️ JSON 解析失败，准备重试... (尝试 {attempt + 1}/{max_retries})")
-                        logger.debug(f"失败的原始响应 (前200字符): {raw_text[:200]}")
-                        print(f"⚠️ Will retry...")
-                        time.sleep(1)  # 短暂等待后重试
-                        continue
-                    else:
-                        logger.error(f"❌ 已达到最大重试次数，JSON 解析仍然失败")
-                        logger.error(f"最后的原始响应 (前500字符): {raw_text[:500]}")
-                        print(f"❌ Max retries reached, giving up")
-                        return None
-
-            except json.JSONDecodeError as e:
-                print(f"❌ JSONDecodeError: {str(e)}")
-                logger.error(f"❌ JSON 解析异常: {str(e)}")
-                if last_raw_text:
-                    logger.error(f"   出错数据片段: {last_raw_text[:200]}...")
-                if attempt < max_retries - 1:
-                    logger.info(f"🔄 准备重试... (尝试 {attempt + 1}/{max_retries})")
-                    time.sleep(1)
                     continue
-                return None
+
+                # 解析并返回
+                parsed_data = self._parse_json_response(raw_text, retry_with_repair=True)
+                if parsed_data:
+                    return parsed_data
 
             except Exception as e:
                 error_str = str(e)
-                print(f"❌ Exception in _call_ai: {type(e).__name__}: {error_str}")
-
-                # 🔴 检查是否是可重试的错误（429, 500, 502, 503, 504）
-                is_rate_limit = "429" in error_str or "Too Many Requests" in error_str
-                is_server_error = any(code in error_str for code in ["500", "502", "503", "504", "InternalServerError", "Bad Gateway", "Service Unavailable"])
-
-                if is_rate_limit or is_server_error:
-                    if attempt < max_retries - 1:
-                        # 指数退避: 2s, 4s, 8s（服务器错误等待更长时间）
-                        base_wait = 3 if is_server_error else 2
-                        wait_time = (2 ** attempt) * base_wait
-                        error_type = "服务器错误" if is_server_error else "速率限制"
-                        logger.warning(f"⚠️ 遇到{error_type}，等待 {wait_time} 秒后重试... (尝试 {attempt + 1}/{max_retries})")
-                        print(f"⚠️ {error_type}，等待 {wait_time} 秒后重试...")
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        logger.error(f"❌ 已达到最大重试次数: {error_str}")
-                        return None
-                else:
-                    logger.error(f"❌ LLM_ENGINE_ERROR: {error_str}")
-                    import traceback
-                    traceback.print_exc()
-                    return None
+                print(f"❌ Gemini Error: {error_str}")
+                if any(code in error_str for code in ["429", "503", "500"]):
+                    wait_time = (2 ** attempt) * 5
+                    print(f"⚠️ 繁忙或限流，等待 {wait_time}s 后重试...")
+                    time.sleep(wait_time)
+                    continue
+                return None
+        return None
 
         return None
 
@@ -1157,366 +1684,168 @@ Machine Learning, Advanced Algorithms, Database Systems (B), Data Mining
         linkedin_url: str = "",
         github_url: str = "",
         portfolio_url: str = "",
+        target_profile: str = "general",
+        edit_instructions: list | None = None,
         additional_notes: str = ""
     ) -> dict:
-        """
-        优化简历以符合香港HR要求
+        """简历优化，支持目标版本和结构化编辑指令。"""
+        logger.info("🎯 开始优化简历...")
+        edit_instructions = edit_instructions or []
+        extracted_contact = self._extract_contact_details(resume_text)
+        extracted_education = self._extract_education_entries(resume_text)
+        extracted_projects = self._extract_project_entries(resume_text)
+        extracted_skills = self._extract_skill_entries(resume_text)
+        extracted_languages = self._extract_languages(resume_text)
+        extracted_work_status = self._extract_work_status(resume_text)
 
-        Args:
-            resume_text: 原始简历文本
-            permanent_resident: 是否为香港永久居民
-            available_immediately: 是否可以立即上班
-            linkedin_url: LinkedIn 地址
-            github_url: GitHub 地址
-            portfolio_url: 个人网站/作品集地址
-            additional_notes: 其他补充信息
-
-        Returns:
-            优化后的简历数据字典
-        """
-        logger.info("🎯 开始优化简历以符合香港HR要求...")
-
-        # 🔴 自动从简历文本提取 URL（如果用户没有手动提供）
-        if not linkedin_url:
-            linkedin_match = re.search(r'(?:https?://)?(?:www\.)?linkedin\.com/in/[\w-]+', resume_text, re.IGNORECASE)
-            if linkedin_match:
-                linkedin_url = linkedin_match.group(0)
-                logger.info(f"📎 自动提取 LinkedIn: {linkedin_url}")
-
-        if not github_url:
-            github_match = re.search(r'(?:https?://)?(?:www\.)?github\.com/[\w-]+', resume_text, re.IGNORECASE)
-            if github_match:
-                github_url = github_match.group(0)
-                logger.info(f"📎 自动提取 GitHub: {github_url}")
-
-        # 构建系统提示词
-        system_prompt = """You are a Professional Resume Consultant specializing in Hong Kong job market requirements.
-
-Your task is to optimize resumes to meet Hong Kong HR expectations while maintaining authenticity.
-
-## Hong Kong HR Requirements:
-
-1. **Work Eligibility**: Clearly state work permit status
-2. **Availability**: Indicate start date availability
-3. **Contact Information**: Include LinkedIn, GitHub if relevant to role
-4. **Format**: Clean, ATS-friendly, reverse chronological
-5. **Language**: Professional English (Hong Kong business standard)
-6. **Length**: Ideally 1 page for fresh graduates, 2 pages maximum for experienced
-7. **Highlights**: Quantifiable achievements, relevant skills
-
-## Optimization Rules:
-
-- Keep all original information accurate and truthful
-- Improve clarity and formatting
-- Add missing sections if needed (e.g., Professional Summary)
-- Reorder sections for better flow: Contact → Summary → Experience → Skills → Education → Projects
-- Use action verbs and quantify achievements where possible
-- Ensure ATS compatibility (no complex formatting)
-
-## 🔴 PROJECT PROTECTION RULES (CRITICAL - NEVER DELETE PROJECTS):
-
-1. **KEEP ALL PROJECTS** - Do NOT delete any projects, especially:
-   - Capstone Project / Final Year Project / Academic Project
-   - Side projects / Personal projects
-   - Any project that shows technical skills
-
-2. **For Fresh Graduates (≤1 year experience)**:
-   - Projects are MORE important than work experience
-   - MUST keep ALL projects to demonstrate technical ability
-   - Only reword/reorder, NEVER delete
-
-3. **Project Optimization (NOT deletion)**:
-   - Reword bullet points to match JD keywords
-   - Reorder projects by relevance (most relevant first)
-   - Add quantifiable metrics if missing
-   - Keep minimum 3-4 bullet points per project
-
-4. **If user did NOT explicitly say "删除" or "delete"**:
-   - Assume they want to KEEP all projects
-   - Only optimize wording and order
-
-## 🔴 USER INSTRUCTIONS (MUST FOLLOW - HIGHEST PRIORITY):
-
-The user may provide special instructions in "Additional Notes". You MUST follow these instructions:
-
-1. **DELETE/REMOVE instructions**: If user says "删除", "remove", "delete" certain projects/sections/content,
-   you MUST exclude them from the output completely. Do NOT include them.
-
-2. **COMPRESS/SHORTEN instructions**: If user says "压缩", "compress", "shorten", "reduce bullets",
-   you MUST reduce content length - fewer bullet points, shorter descriptions, remove less important items.
-
-3. **ADD/INCLUDE instructions**: If user says "增加", "add", "include" new content,
-   you MUST add it AND optimize it to match the resume's overall theme and target role.
-   - Analyze the resume's career direction (e.g., Data Science, AI, Frontend, Backend)
-   - New content should use similar language, keywords, and style as existing content
-   - Quantify achievements where possible
-   - Make it consistent with the candidate's experience level
-
-4. **SKILL EXTRACTION FROM NEW CONTENT (INTELLIGENT MATCHING)**:
-   When user adds new projects or experiences, you MUST:
-
-   Step 1: Analyze the EXISTING resume to understand the career direction:
-   - What is the target role? (DS, DE, Quant, BA, PM, etc.)
-   - What skills are already listed?
-   - What is the writing style and keyword pattern?
-
-   Step 2: Extract skills from the NEW project that MATCH the resume direction:
-   - If resume is DS-focused and new project mentions "built a web scraper":
-     → Extract: "Data Collection", "Web Scraping", "Python" (NOT "HTML", "CSS")
-   - If resume is Quant-focused and new project mentions "predicted stock prices":
-     → Extract: "Time Series Forecasting", "Alpha Generation", "Statistical Modeling"
-   - If resume is BA-focused and new project mentions "analyzed customer data":
-     → Extract: "Customer Analytics", "SQL", "Business Intelligence"
-
-   Step 3: ADD extracted skills to the appropriate skill category:
-   - Group with similar existing skills
-   - Use consistent naming convention (match existing skill format)
-   - Do NOT duplicate skills already present
-
-   Step 4: REWRITE the new project description to match resume style:
-   - Use same action verbs as existing projects
-   - Add quantifiable metrics if possible
-   - Match the technical depth level of existing content
-
-   Examples:
-   - User adds: "做了一个用 Python 预测股票的项目"
-   - If resume is DS → "Developed stock prediction model using LSTM, achieving 15% improvement over baseline"
-   - If resume is Quant → "Built alpha generation signal with Sharpe ratio 1.2 using time series analysis"
-   - If resume is BA → "Analyzed market trends to identify investment opportunities, supporting $1M trading decisions"
-
-5. **TARGET ROLE TRANSFORMATION**: If user specifies a target direction like:
-   - "改成 quant 相关" / "quantitative" / "量化"
-   - "改成 data engineer" / "数据工程"
-   - "改成 ML engineer" / "机器学习工程师"
-
-   You MUST transform the ENTIRE resume to match that direction:
-
-   **For Quantitative/Quant roles:**
-   - Rewrite Professional Summary to emphasize: quantitative analysis, statistical modeling, trading strategies
-   - Reorder skills: Python, R, SQL, C++ → Statistical Modeling, Time Series → Risk Management, Portfolio Optimization
-   - Reframe project bullets: "Built ML model" → "Developed alpha generation model with Sharpe ratio 1.8"
-   - Add quant keywords: backtesting, factor models, Greeks, VaR, Monte Carlo, stochastic calculus
-   - Emphasize: mathematics background, financial modeling, performance metrics (Sharpe, drawdown, PnL)
-
-   **For Data Science roles:**
-   - Emphasize: ML models, A/B testing, feature engineering, model deployment
-   - Keywords: accuracy, AUC, precision/recall, production ML, ETL
-
-   **For Data Engineering roles:**
-   - Emphasize: pipeline design, data warehousing, scalability, ETL/ELT
-   - Keywords: Spark, Airflow, dbt, data lake, batch/streaming
-
-   **For ML Engineering roles:**
-   - Emphasize: model serving, MLOps, infrastructure, latency optimization
-   - Keywords: TensorFlow Serving, Kubernetes, model monitoring, A/B testing
-
-   **For Business Analyst (BA) roles:**
-   - Emphasize: requirements gathering, stakeholder management, process optimization, data-driven insights
-   - Reframe technical projects: "Built ML model" → "Analyzed customer data to identify $2M revenue opportunity"
-   - Keywords: SQL, Tableau, Power BI, user stories, process mapping, KPIs, ROI analysis
-   - Add business context to technical work: impact on revenue, cost savings, efficiency gains
-
-   **For Product Manager (PM) roles:**
-   - Emphasize: product strategy, user research, roadmap planning, cross-functional leadership
-   - Reframe: "Developed feature" → "Owned end-to-end product lifecycle, increasing user engagement by 40%"
-   - Keywords: PRD, user stories, A/B testing, OKRs, sprint planning, stakeholder alignment
-   - Focus on: user impact, business metrics, team collaboration
-
-   **For Consultant roles:**
-   - Emphasize: problem-solving, client management, strategic recommendations
-   - Keywords: stakeholder engagement, business case, ROI, presentation skills, project management
-   - Structure achievements: "Situation → Action → Result" format
-
-   **For Finance/Accounting roles:**
-   - Emphasize: financial modeling, budgeting, reporting, compliance
-   - Keywords: Excel, financial statements, variance analysis, forecasting, audit
-
-6. **STYLE CONSISTENCY**: When adding new content, match the resume's existing tone:
-   - If resume focuses on DS/AI → emphasize ML, data analysis, model performance metrics
-   - If resume focuses on engineering → emphasize system design, scalability, code quality
-   - If resume focuses on product → emphasize user impact, business metrics, stakeholder management
-
-OUTPUT PURE JSON ONLY. No markdown, no explanations."""
-
-        # 构建用户提示词
-        user_prompt = f"""# MISSION
-Optimize the following resume for Hong Kong HR requirements.
-
-# ORIGINAL RESUME
-{resume_text[:4000]}
-
-# ADDITIONAL INFORMATION (To be added if provided)
-- Permanent Resident Status: {"Yes - Hong Kong Permanent Resident" if permanent_resident else "Check original resume for work eligibility status"}
-- Availability: {"Available Immediately" if available_immediately else "Check original resume for availability status"}
-- LinkedIn: {linkedin_url if linkedin_url else "Check original resume for LinkedIn URL"}
-- GitHub: {github_url if github_url else "Check original resume for GitHub URL"}
-- Portfolio: {portfolio_url if portfolio_url else "Check original resume for portfolio URL"}
-- User Feedback / Layout Instructions: {additional_notes if additional_notes else "Not provided"}
-
-# USER FEEDBACK HANDLING (CRITICAL - Apply if feedback provided):
-You are a professional resume editor. The user may provide feedback in Chinese or English.
-You MUST understand and execute their instructions precisely.
-
-## 1. CONTENT OPERATIONS:
-**删除/remove/delete** → Remove specified content completely
-  - "删除这个项目" → Remove that project
-  - "去掉实习经历" → Remove internship experiences
-
-**新增/add/include** → Add new content
-  - "加上Python技能" → Add Python to skills
-  - "添加一段XX经历" → Add new experience entry
-
-**修改/change/rewrite** → Modify existing content
-  - "把Summary改成..." → Rewrite the summary
-  - "重写这段经历" → Rewrite that experience
-
-**合并/merge/combine** → Combine multiple items
-  - "把这两个项目合并" → Merge two projects into one
-
-## 2. ORDER OPERATIONS:
-**移动/move/放到** → Reorder sections or items
-  - "把Projects移到Experience前面" → Move projects before experience
-  - "Education放到最后" → Put education at the end
-  - "把第3个bullet放到第一个" → Reorder bullets within an entry
-
-**交换/swap** → Swap positions
-  - "交换Skills和Projects" → Swap these two sections
-
-**置顶/放最前** → Move to top
-  - "最近的工作放最前面" → Most recent job first
-
-## 3. LENGTH OPERATIONS:
-**扩展/expand/详细/写长一点** → Add more details
-  - "这部分写详细一点" → Expand with more bullets/details
-  - "第一页太空了" → Add more content overall
-
-**精简/shorten/压缩/简化** → Reduce length
-  - "这段太长了" → Shorten this section
-  - "第二页太满了" → Reduce content overall
-  - "每个经历只保留3个bullet" → Limit bullets per entry
-
-**平衡/balance** → Distribute content evenly
-  - "平衡两页内容" → Balance content across pages
-
-## 4. STYLE OPERATIONS:
-**突出/highlight/强调** → Emphasize certain aspects
-  - "突出数据分析能力" → Emphasize data analysis skills
-  - "强调领导力" → Highlight leadership
-
-**弱化/downplay** → De-emphasize
-  - "不要太强调这个" → Reduce emphasis on this
-
-**针对/tailor/优化给** → Customize for specific job
-  - "针对这个JD优化" → Tailor for the job description
-
-## 5. DETAIL OPERATIONS:
-**改日期/update date** → Change dates
-  - "把日期改成2023-2024" → Update date range
-
-**改名称/rename** → Change names
-  - "公司名用全称" → Use full company name
-
-**改顺序/reorder bullets** → Reorder items within a section
-  - "把最重要的成就放第一个" → Put most important achievement first
-
-# REQUIRED OUTPUT SCHEMA (Strict JSON)
-{{
-    "name": "Full Name from resume",
-    "email": "Email from resume",
-    "phone": "Phone from resume",
-    "linkedin": "{linkedin_url if linkedin_url else ''}",
-    "github": "{github_url if github_url else ''}",
-    "portfolio": "{portfolio_url if portfolio_url else ''}",
-    "work_eligibility": "{('Hong Kong Permanent Resident - No work visa required' if permanent_resident else 'Requires work visa sponsorship')}",
-    "availability": "{('Available immediately' if available_immediately else 'Available with notice period')}",
-    "summary": "Professional summary (2-3 sentences highlighting key strengths and experience)",
-    "experience": [
-        {{
-            "title": "Job Title",
-            "company": "Company Name",
-            "location": "Location",
-            "date": "Date Range (e.g., Jan 2024 - Present)",
-            "bullets": [
-                "Achievement with quantifiable impact (e.g., Increased sales by 30%)",
-                "Responsibility with action verb (e.g., Led team of 5 developers)"
-            ]
-        }}
-    ],
-    "skills": [
-        {{"name": "Technical Skills", "keywords": ["Skill1", "Skill2"]}},
-        {{"name": "Languages", "keywords": ["English (Native)", "Cantonese (Fluent)"]}}
-    ],
-    "education": {{
-        "university": "University Name",
-        "degree": "Degree Name",
-        "date": "Graduation Date",
-        "honors": "Honors/GPA if impressive"
-    }},
-    "projects": [
-        {{
-            "name": "Project Name",
-            "date": "Project Date",
-            "bullets": ["Project achievement or description"]
-        }}
-    ],
-    "certifications": ["Certification 1", "Certification 2"],
-    "additional_info": "{additional_notes if additional_notes else ''}"
-}}
-
-# CRITICAL REQUIREMENTS:
-
-1. **Work Eligibility**: Must include clear statement about work permit status
-2. **Availability**: Must state availability clearly
-3. **Contact Information**:
-   - Use provided LinkedIn URL if given: {linkedin_url}
-   - Use provided GitHub URL if given: {github_url}
-   - Use provided Portfolio URL if given: {portfolio_url}
-   - If not provided, use empty string ""
-4. **Date Fields**: Every experience and project MUST have specific dates
-5. **Quantifiable Achievements**: Add metrics where possible (%, $, time saved, etc.)
-6. **Action Verbs**: Start each bullet with strong action verbs
-7. **ATS-Friendly**: Use standard section names and clean formatting
-
-OUTPUT ONLY THE JSON. NO EXPLANATIONS."""
-
-        # 调用 AI
-        logger.info("📡 Calling LLM for resume optimization...")
-        result = self._call_ai(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=4000,
-            prefill="{",
-            temperature=0
+        profile_guidance = {
+            "general": "Keep the resume broadly applicable for modern tech roles. Balance engineering, product impact, and ATS keyword coverage.",
+            "qa": "Emphasize testing, automation, defect prevention, QA workflows, regression coverage, test planning, and quality metrics.",
+            "fintech": "Emphasize financial systems, risk, data accuracy, compliance awareness, analytics, transaction workflows, and business-critical reliability.",
+            "da": "Emphasize analytics, SQL, dashboards, experimentation, business insights, data cleaning, reporting, and measurable decision support.",
+        }
+        profile_instruction = profile_guidance.get(
+            str(target_profile).lower(),
+            profile_guidance["general"],
         )
+        serialized_instructions = json.dumps(edit_instructions, ensure_ascii=False, indent=2)
+
+        system_prompt = """You are a Professional Resume Consultant. 
+MISSION: Map raw resume text into a specific JSON schema and follow structured edit instructions exactly.
+🔴 DATA INTEGRITY: You MUST include ALL work experiences, ALL projects, and ALL education details unless the user explicitly deletes something.
+🔴 CONTACT INTEGRITY: Preserve email, phone, LinkedIn, GitHub, portfolio, and languages whenever they appear in the source.
+🔴 STATUS INTEGRITY: Preserve permanent residency, visa/work eligibility, and availability whenever they appear in the source.
+🔴 EDIT RULES:
+- delete: remove only the targeted content.
+- add: add new content naturally in the best matching section.
+- modify: rewrite only the targeted section while preserving factual consistency.
+🔴 TARGET PROFILE: adjust wording, summary, and keyword emphasis for the requested profile without inventing experience.
+🔴 MANDATORY: Do NOT omit "Loan Risk Analytics System" or "Capstone" unless explicitly deleted.
+🔴 FORMAT: Output ONLY pure JSON."""
+
+        user_prompt = f"""# RAW CONTENT:
+{resume_text[:5000]}
+
+# TARGET PROFILE:
+{target_profile}
+
+# PROFILE GUIDANCE:
+{profile_instruction}
+
+# STRUCTURED EDIT INSTRUCTIONS:
+{serialized_instructions}
+
+# ADDITIONAL NOTES:
+{additional_notes if additional_notes else "Standard HK optimization."}
+
+# OUTPUT SCHEMA:
+{{
+  "name": "...",
+  "email": "...",
+  "phone": "...",
+  "linkedin": "...",
+  "github": "...",
+  "portfolio": "...",
+  "summary": "...",
+  "experience": [{{"title": "...", "company": "...", "date": "...", "bullets": ["..."]}}],
+  "projects": [{{"name": "...", "date": "...", "bullets": ["..."]}}],
+  "education": [{{"university": "...", "degree": "...", "date": "...", "gpa": "...", "courses": [{{"name": "..."}}]}}],
+  "skills": [{{"name": "...", "keywords": ["..."]}}],
+  "languages": ["..."]
+}}"""
+
+        result = None
+        for attempt in range(2):
+            logger.info(f"📡 Calling Gemini (Attempt {attempt+1}/2)...")
+            candidate = self._call_ai(system_prompt, user_prompt, max_tokens=4000, temperature=0)
+            
+            if candidate:
+                # 🛠️ 字段对齐修复
+                if "projects" in candidate and isinstance(candidate["projects"], list):
+                    for p in candidate["projects"]:
+                        if "title" in p and "name" not in p: p["name"] = p["title"]
+                if extracted_projects:
+                    candidate_projects = candidate.get("projects", [])
+                    if not isinstance(candidate_projects, list):
+                        candidate_projects = []
+                    candidate["projects"] = self._merge_missing_projects(
+                        candidate_projects,
+                        extracted_projects,
+                        edit_instructions,
+                    )
+                    candidate["projects"] = self._dedupe_and_merge_projects(candidate["projects"])
+                    candidate["projects"] = self._apply_project_edit_instruction_hints(
+                        candidate["projects"],
+                        edit_instructions,
+                    )
+                    candidate["projects"] = self._apply_deterministic_project_edits(
+                        candidate["projects"],
+                        edit_instructions,
+                    )
+                if extracted_skills:
+                    candidate_skills = candidate.get("skills", [])
+                    if not isinstance(candidate_skills, list):
+                        candidate_skills = []
+                    candidate["skills"] = self._merge_missing_skills(candidate_skills, extracted_skills)
+                if not candidate.get("education") and extracted_education:
+                    candidate["education"] = extracted_education
+                
+                requested_delete = "delete" in str(additional_notes).lower() or any(
+                    item.get("action") == "delete" for item in edit_instructions
+                )
+                is_complete, reason = self._validate_resume_result(
+                    candidate,
+                    allow_missing_projects=requested_delete,
+                )
+
+                print(
+                    f"📊 Check: exp={len(candidate.get('experience', []))}, "
+                    f"proj={len(candidate.get('projects', []))}, "
+                    f"edu={bool(candidate.get('education'))}, complete={is_complete}"
+                )
+
+                if is_complete:
+                    result = candidate
+                    break
+                logger.warning(f"⚠️ Data incomplete ({reason}), retrying...")
+                user_prompt += (
+                    "\n\nCRITICAL: Previous output was incomplete. "
+                    "You must return non-empty education and preserve work experience/projects from the source."
+                )
 
         if result:
-            logger.info("✅ Resume optimization successful")
-
-            # 🔴 强制覆盖用户明确提供的字段（LLM 可能会忽略）
-            # 🔴 自动补全 URL 前缀
-            def normalize_url(url: str) -> str:
-                if not url:
-                    return ""
-                url = url.strip()
-                if url and not url.startswith(("http://", "https://")):
-                    return f"https://{url}"
-                return url
-
-            if linkedin_url:
-                result["linkedin"] = normalize_url(linkedin_url)
-                logger.info(f"✅ 强制设置 LinkedIn: {result['linkedin']}")
-            if github_url:
-                result["github"] = normalize_url(github_url)
-                logger.info(f"✅ 强制设置 GitHub: {result['github']}")
-            if portfolio_url:
-                result["portfolio"] = normalize_url(portfolio_url)
-                logger.info(f"✅ 强制设置 Portfolio: {result['portfolio']}")
             if permanent_resident:
-                result["work_eligibility"] = "Hong Kong Permanent Resident - No work visa required"
+                result["work_eligibility"] = "Hong Kong Permanent Resident"
+            elif not result.get("work_eligibility") and extracted_work_status.get("work_eligibility"):
+                result["work_eligibility"] = extracted_work_status["work_eligibility"]
+
             if available_immediately:
                 result["availability"] = "Available immediately"
-
+            elif not result.get("availability") and extracted_work_status.get("availability"):
+                result["availability"] = extracted_work_status["availability"]
+            if not result.get("email") and extracted_contact.get("email"):
+                result["email"] = extracted_contact["email"]
+            if not result.get("phone") and extracted_contact.get("phone"):
+                result["phone"] = extracted_contact["phone"]
+            if linkedin_url:
+                result["linkedin"] = linkedin_url
+            elif not result.get("linkedin") and extracted_contact.get("linkedin"):
+                result["linkedin"] = extracted_contact["linkedin"]
+            if github_url:
+                result["github"] = github_url
+            elif not result.get("github") and extracted_contact.get("github"):
+                result["github"] = extracted_contact["github"]
+            if portfolio_url:
+                result["portfolio"] = portfolio_url
+            elif not result.get("portfolio") and extracted_contact.get("portfolio"):
+                result["portfolio"] = extracted_contact["portfolio"]
+            if result.get("linkedin") and not self._is_valid_url(result["linkedin"]):
+                result["linkedin"] = extracted_contact.get("linkedin", "")
+            if result.get("github") and not self._is_valid_url(result["github"]):
+                result["github"] = extracted_contact.get("github", "")
+            if result.get("portfolio") and not self._is_valid_url(result["portfolio"]):
+                result["portfolio"] = extracted_contact.get("portfolio", "")
+            if not result.get("languages") and extracted_languages:
+                result["languages"] = extracted_languages
             return result
-        else:
-            logger.error("❌ Resume optimization failed")
-            return None
+        return None

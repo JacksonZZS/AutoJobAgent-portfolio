@@ -9,10 +9,17 @@ import time
 import sqlite3
 from pathlib import Path
 from typing import Optional, Tuple
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 从环境变量读取密钥，生产环境必须设置
-# 支持 JWT_SECRET (docker-compose) 或 AUTH_SECRET_KEY
-SECRET_KEY = os.environ.get("JWT_SECRET") or os.environ.get("AUTH_SECRET_KEY", "change-this-in-production-IMPORTANT")
+# 支持 JWT_SECRET / JWT_SECRET_KEY / AUTH_SECRET_KEY
+SECRET_KEY = (
+    os.environ.get("JWT_SECRET")
+    or os.environ.get("JWT_SECRET_KEY")
+    or os.environ.get("AUTH_SECRET_KEY", "change-this-in-production-IMPORTANT")
+)
 
 # 数据库路径（使用绝对路径，与 auth_manager.py 保持一致）
 DB_PATH = Path(__file__).parent.parent / "data/users.db"

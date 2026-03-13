@@ -21,6 +21,7 @@ build/
 # Node
 node_modules/
 frontend/node_modules/
+frontend/test-results/
 
 # Data (runtime/user-specific)
 data/*
@@ -71,6 +72,7 @@ backend.log
 
 # Local workspace and scratch files
 .boardroom/
+.claude/
 .debug/
 workspace_personal_studio/
 ~/
@@ -81,6 +83,24 @@ md_to_pdf.py
 fix_syntax.py
 restore_full.py
 MarketIntelligenceEnhanced.tsx
+backend/data/
+.clinerules
+ARCHITECTURE_UPGRADE_REPORT.md
+CLAUDE.md
+CORE_EXPERIENCE_FIX_GUIDE.md
+COVER_LETTER_OPTIMIZATION.md
+DASHBOARD_FIX_SUMMARY.md
+IDENTITY_ASSET_REFACTOR.md
+PROJECT_SUMMARY.md
+QUICKSTART.md
+RUN_GUIDE.md
+SAAS_ARCHITECTURE_REPORT.md
+SAAS_REFACTOR_REPORT.md
+SEMI_AUTO_APPLY_GUIDE.md
+TESTING_GUIDE.md
+UPGRADE_NOTES.md
+USAGE.md
+USAGE_GUIDE.md
 
 # Legacy deprecated
 legacy/deprecated/

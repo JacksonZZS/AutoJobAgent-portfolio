@@ -16,6 +16,7 @@ from core.scraper import search_and_crawl_jobs
 from core.apply_bot import JobsDBApplyBot
 from core.user_identity import get_user_identity_manager
 from core.health_checker import check_indeed_health, get_health_checker, IndeedStatus
+from core.market_analyzer import extract_skills, extract_salary
 
 # 导入认证依赖
 from backend.api.v1.auth import get_current_user
@@ -554,12 +555,21 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                                 # 用户确认已投递
                                 success_count += 1
                                 print(f"      🎉 用户确认已投递！({success_count}/{target_count})")
+                                # Extract skills/salary for Market Intelligence
+                                _jd = job.get("jd_content", "")
+                                _skills = extract_skills(_jd) if _jd else []
+                                _salary = extract_salary(_jd) or extract_salary(job_title)
+
                                 history_mgr.add_job(
                                     link=job.get("link", ""),
                                     title=job_title,
                                     company=job_company,
                                     status="applied",
-                                    score=score
+                                    score=score,
+                                    jd_content=_jd,
+                                    location=job.get("location", ""),
+                                    salary_raw=_salary.get("raw") if _salary else None,
+                                    extracted_skills=_skills,
                                 )
                             else:
                                 # 用户跳过
@@ -568,12 +578,21 @@ def run_job_task(user_id: int, request: StartTaskRequest):
 
                         else:
                             # 评分不足，记录到历史避免重复评分
+                            # Extract skills/salary for Market Intelligence
+                            _jd_low = job.get("jd_content", "")
+                            _skills_low = extract_skills(_jd_low) if _jd_low else []
+                            _salary_low = extract_salary(_jd_low) or extract_salary(job_title)
+
                             history_mgr.add_job(
                                 link=job.get("link", ""),
                                 title=job_title,
                                 company=job_company,
                                 status="low_score",
-                                score=score
+                                score=score,
+                                jd_content=_jd_low,
+                                location=job.get("location", ""),
+                                salary_raw=_salary_low.get("raw") if _salary_low else None,
+                                extracted_skills=_skills_low,
                             )
                             failed_count += 1
 
@@ -817,7 +836,8 @@ async def submit_manual_decision(
                 company=company_name,
                 status="skipped_permanent",
                 score=manual_review_data.get("score"),
-                reason="User chose to permanently skip"
+                reason="User chose to permanently skip",
+                location=manual_review_data.get("location", ""),
             )
             print(f"[跳过] 已写入历史: {company_name} - {job_title}")
 
