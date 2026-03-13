@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Resume - {{ name }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+Pro:wght@600&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; font-size: 10pt; line-height: 1.4; color: #2d3748; padding: 10mm 14mm; background: white; }
+        header { text-align: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #1e3a5f; }
+        h1 { font-family: 'Source Serif Pro', serif; font-size: 22pt; font-weight: 700; color: #1a202c; text-transform: uppercase; }
+        .contact-info { font-size: 9.5pt; color: #4a5568; margin-top: 4px; }
+        .contact-info a { color: #2b6cb0; text-decoration: none; }
+        .work-status { margin-top: 10px; font-size: 10pt; color: #1e3a5f; font-weight: 600; background: #ebf4ff; padding: 6px 14px; display: inline-block; border-radius: 4px; border: 1px solid #bee3f8; }
+        h2 { font-size: 12pt; font-weight: 700; color: #1e3a5f; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 16px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #1e3a5f; }
+        .entry { margin-bottom: 12px; page-break-inside: avoid; }
+        .entry-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; gap: 12px; }
+        .entry-title { font-weight: 600; font-size: 11.5pt; color: #1a202c; flex: 1; }
+        .entry-date { font-size: 10.5pt; color: #718096; font-weight: 500; white-space: nowrap; }
+        .entry-subtitle { font-size: 10.5pt; color: #4a5568; margin-bottom: 6px; }
+        .company { font-weight: 500; color: #2d3748; }
+        ul { margin: 8px 0 0 0; padding-left: 18px; }
+        li { margin-bottom: 5px; line-height: 1.6; color: #2d3748; font-size: 10.5pt; }
+        .summary { font-size: 10.5pt; line-height: 1.7; color: #2d3748; text-align: justify; padding: 14px 16px; background: #f7fafc; border-left: 4px solid #1e3a5f; border-radius: 0 4px 4px 0; margin-bottom: 6px; }
+        .skills-grid { display: flex; flex-direction: column; gap: 8px; }
+        .skill-row { font-size: 10.5pt; padding: 6px 0; }
+        .skill-category { font-weight: 600; color: #1e3a5f; min-width: 140px; display: inline-block; }
+        .gpa { font-size: 10.5pt; color: #4a5568; margin-top: 4px; }
+        .coursework { font-size: 10pt; color: #718096; margin-top: 6px; line-height: 1.6; }
+        .languages-list { font-size: 10.5pt; color: #2d3748; margin-top: 8px; }
+        @media print { body { padding: 18mm 20mm; } @page { margin: 0; size: A4; } h2 { page-break-after: avoid !important; } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>{{ name }}</h1>
+        <div class="contact-info">
+            {% if phone %}{{ phone }}{% endif %}
+            {% if email %} | <a href="mailto:{{ email }}">{{ email }}</a>{% endif %}
+            {% if linkedin %} | <a href="{{ linkedin }}">LinkedIn</a>{% endif %}
+            {% if github %} | <a href="{{ github }}">GitHub</a>{% endif %}
+            {% if portfolio %} | <a href="{{ portfolio }}">Portfolio</a>{% endif %}
+        </div>
+        {% if work_eligibility or availability %}
+        <div class="work-status">
+            {{ work_eligibility }} {% if availability %}| {{ availability }}{% endif %}
+        </div>
+        {% endif %}
+    </header>
+
+    {% if summary %}<section><h2>Professional Summary</h2><p class="summary">{{ summary }}</p></section>{% endif %}
+
+    {% if experience %}<section><h2>Work Experience</h2>
+        {% for job in experience %}<div class="entry">
+            <div class="entry-header"><span class="entry-title">{{ job.title }}</span><span class="entry-date">{{ job.date }}</span></div>
+            <div class="entry-subtitle"><span class="company">{{ job.company }}</span>{% if job.location %}, {{ job.location }}{% endif %}</div>
+            <ul>{% for b in job.bullets %}<li>{{ b | safe }}</li>{% endfor %}</ul>
+        </div>{% endfor %}</section>{% endif %}
+
+    {% if projects %}<section><h2>Projects</h2>
+        {% for p in projects %}<div class="entry">
+            <div class="entry-header"><span class="entry-title">{{ p.name }}</span><span class="entry-date">{{ p.date }}</span></div>
+            <ul>{% for b in p.bullets %}<li>{{ b | safe }}</li>{% endfor %}</ul>
+        </div>{% endfor %}</section>{% endif %}
+
+    {% if education %}<section><h2>Education</h2>
+        {% set edu_list = education if education is iterable and education is not string and education is not mapping else [education] %}
+        {% for edu in edu_list %}<div class="entry">
+            <div class="entry-header"><span class="entry-title">{{ edu.university }}</span><span class="entry-date">{{ edu.date }}</span></div>
+            <div class="entry-subtitle">{{ edu.degree }}{% if edu.honors %} | <strong>{{ edu.honors }}</strong>{% endif %}</div>
+            {% if edu.gpa %}<div class="gpa"><strong>GPA:</strong> {{ edu.gpa }}</div>{% endif %}
+            {% if edu.courses %}<div class="coursework"><strong>Key Courses:</strong> {% for c in edu.courses %}{{ c.name if c.name else c }}{% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+        </div>{% endfor %}</section>{% endif %}
+
+    {% if skills %}<section><h2>Skills</h2><div class="skills-grid">
+        {% for s in skills %}<div class="skill-row"><span class="skill-category">{{ s.name }}:</span> {{ s.keywords | join(', ') if s.keywords is iterable else s.keywords }}</div>{% endfor %}
+    </div></section>{% endif %}
+
+    {% if languages %}<section><h2>Languages</h2><div class="languages-list">
+        {% for l in languages %}{{ l }}{% if not loop.last %} | {% endif %}{% endfor %}
+    </div></section>{% endif %}
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoJob Agent</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 350px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      padding: 16px;
+    }
+    
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0c4a6e;
+    }
+    
+    .subtitle {
+      font-size: 12px;
+      color: #0369a1;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    
+    .status.success {
+      background: #dcfce7;
+      color: #166534;
+    }
+    
+    .status.warning {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+    }
+    
+    .btn-primary:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+    }
+    
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+    
+    .job-info {
+      padding: 12px;
+      background: #f8fafc;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    
+    .job-title {
+      font-weight: 600;
+      color: #0c4a6e;
+      margin-bottom: 4px;
+    }
+    
+    .job-company {
+      font-size: 13px;
+      color: #0369a1;
+    }
+    
+    .settings {
+      margin-top: 12px;
+    }
+    
+    .settings-label {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    
+    .settings-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    
+    .settings-input:focus {
+      outline: none;
+      border-color: #0ea5e9;
+    }
+    
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 12px;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🎯</div>
+    <div>
+      <div class="title">AutoJob Agent</div>
+      <div class="subtitle">JD 抓取助手</div>
+    </div>
+  </div>
+  
+  <div class="card">
+    <div id="status" class="status warning">
+      <span>⏳</span>
+      <span>检测页面中...</span>
+    </div>
+    
+    <div id="jobInfo" class="job-info" style="display: none;">
+      <div id="jobTitle" class="job-title">-</div>
+      <div id="jobCompany" class="job-company">-</div>
+    </div>
+    
+    <button id="extractBtn" class="btn btn-primary" disabled>
+      <span>📋</span>
+      <span>抓取职位信息</span>
+    </button>
+    
+    <button id="sendBtn" class="btn btn-secondary" style="display: none; margin-top: 8px;">
+      <span>🚀</span>
+      <span>发送到 AutoJob Agent</span>
+    </button>
+  </div>
+  
+  <div class="card settings">
+    <div class="settings-label">API 地址</div>
+    <input type="text" id="apiUrl" class="settings-input" value="http://localhost:8000" placeholder="http://localhost:8000">
+  </div>
+  
+  <div class="footer">
+    AutoJob Agent Chrome Extension v1.0
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

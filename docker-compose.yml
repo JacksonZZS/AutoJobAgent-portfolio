@@ -1,0 +1,55 @@
+# ============================================
+# AutoJobAgent - Docker Compose
+# ============================================
+
+version: '3.8'
+
+services:
+  # Main Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autojobagent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-key-change-in-production}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    volumes:
+      # Persist user data
+      - ./data/uploads:/app/data/uploads
+      - ./data/outputs:/app/data/outputs
+      - ./data/users.db:/app/data/users.db
+      - ./data/browser_profiles:/app/data/browser_profiles
+      - ./data/status:/app/data/status
+      - ./data/sessions:/app/data/sessions
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Nginx Reverse Proxy (Production)
+  nginx:
+    image: nginx:alpine
+    container_name: autojobagent-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - app
+    profiles:
+      - production
+
+# Volumes for persistence
+volumes:
+  app_data:

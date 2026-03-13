@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "AutoJob Agent - JD 抓取助手",
+  "version": "1.0.0",
+  "description": "一键抓取职位描述，发送到 AutoJob Agent 进行智能匹配",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://www.indeed.com/*",
+    "https://www.indeed.hk/*",
+    "https://hk.indeed.com/*",
+    "https://www.glassdoor.com/*",
+    "https://www.jobsdb.com/*",
+    "https://www.seek.com.au/*",
+    "https://www.monster.com/*",
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/*",
+        "https://www.indeed.com/*",
+        "https://www.indeed.hk/*",
+        "https://hk.indeed.com/*",
+        "https://www.glassdoor.com/job-listing/*",
+        "https://www.jobsdb.com/job/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

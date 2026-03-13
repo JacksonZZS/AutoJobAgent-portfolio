@@ -1,0 +1,86 @@
+# Python
+venv*/
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Data (runtime/user-specific)
+data/*
+!data/templates/
+!data/templates/**
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright/.cache/
+
+# Build artifacts
+frontend/dist/
+.venv/
+
+# Browser profiles (DrissionPage, Playwright, etc.)
+chrome_profile/
+chrome_profile_indeed/
+
+# Claude skills cache
+.claude/skills/*/scripts/__pycache__/
+
+# Output files
+output/
+
+# Lock files
+*.lock
+pnpm-lock.yaml
+
+# Test files
+nodriver_*.png
+stealth_test.png
+
+# Debug screenshots (root level)
+*.png
+
+# Cookies & sessions
+linkedin_cookies.json
+
+# Backend log
+backend.log
+
+# Local workspace and scratch files
+.boardroom/
+.debug/
+workspace_personal_studio/
+~/
+Interview_*.md
+Interview_*.pdf
+generate_interview_guide*.py
+md_to_pdf.py
+fix_syntax.py
+restore_full.py
+MarketIntelligenceEnhanced.tsx
+
+# Legacy deprecated
+legacy/deprecated/

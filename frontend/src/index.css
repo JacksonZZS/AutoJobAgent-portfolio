@@ -1,0 +1,294 @@
+/* AutoJobAgent Modern Design System - Plus Jakarta Sans */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Variables for Theme */
+:root {
+  --bg-primary: rgba(255, 255, 255, 0.85);
+  --bg-secondary: rgba(255, 255, 255, 0.75);
+  --bg-hover: rgba(255, 255, 255, 0.95);
+  --border-color: rgba(148, 163, 184, 0.3);
+  --border-hover: rgba(100, 116, 139, 0.4);
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --shadow-color: rgba(15, 23, 42, 0.08);
+  --glass-blur: 20px;
+}
+
+.dark {
+  --bg-primary: rgba(30, 41, 59, 0.8);
+  --bg-secondary: rgba(30, 41, 59, 0.6);
+  --bg-hover: rgba(51, 65, 85, 0.8);
+  --border-color: rgba(71, 85, 105, 0.6);
+  --border-hover: rgba(100, 116, 139, 0.8);
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+}
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+    background-size: 200% 200%;
+    background-attachment: fixed;
+    color: var(--text-primary);
+    min-height: 100vh;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .dark body {
+    background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e293b 100%);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-bold tracking-tight;
+    color: var(--text-primary);
+  }
+}
+
+@layer components {
+  /* Glass Card - Glassmorphism with CSS Variables */
+  .glass-card {
+    background: var(--bg-primary);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--border-color);
+    @apply rounded-2xl shadow-xl transition-all duration-300 ease-out;
+  }
+
+  .glass-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
+    box-shadow: 0 25px 50px -12px var(--shadow-color);
+  }
+
+  /* Glass Input */
+  .glass-input {
+    background: var(--bg-secondary);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    @apply w-full px-4 py-3 rounded-xl transition-all duration-200;
+  }
+
+  .glass-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .glass-input:hover {
+    border-color: var(--border-hover);
+  }
+
+  .glass-input:focus {
+    background: var(--bg-hover);
+    @apply outline-none ring-2 ring-sky-500/30 border-sky-400;
+  }
+
+  .dark .glass-input:focus {
+    @apply ring-sky-400/30 border-sky-500;
+  }
+
+  /* Glass Button Primary */
+  .glass-button {
+    @apply px-6 py-3 bg-gradient-to-r from-sky-600 to-sky-500
+           text-white font-semibold rounded-xl shadow-lg shadow-sky-500/30
+           hover:shadow-xl hover:shadow-sky-500/40 hover:scale-[1.02]
+           active:scale-[0.98]
+           transition-all duration-200 ease-out
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
+           cursor-pointer;
+  }
+
+  .dark .glass-button {
+    @apply from-sky-500 to-cyan-500;
+  }
+
+  /* Glass Button Secondary */
+  .glass-button-secondary {
+    background: var(--bg-secondary);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    @apply px-6 py-3 font-semibold rounded-xl
+           active:scale-[0.98]
+           transition-all duration-200 ease-out
+           cursor-pointer;
+  }
+
+  .glass-button-secondary:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
+  }
+
+  /* Glass Button Success */
+  .glass-button-success {
+    @apply px-6 py-3 bg-gradient-to-r from-green-600 to-green-500
+           text-white font-semibold rounded-xl shadow-lg shadow-green-500/30
+           hover:shadow-xl hover:shadow-green-500/40 hover:scale-[1.02]
+           active:scale-[0.98]
+           transition-all duration-200 ease-out
+           cursor-pointer;
+  }
+
+  .dark .glass-button-success {
+    @apply from-green-500 to-emerald-500;
+  }
+
+  /* Glass Button Danger */
+  .glass-button-danger {
+    @apply px-6 py-3 bg-gradient-to-r from-red-600 to-red-500
+           text-white font-semibold rounded-xl shadow-lg shadow-red-500/30
+           hover:shadow-xl hover:shadow-red-500/40 hover:scale-[1.02]
+           active:scale-[0.98]
+           transition-all duration-200 ease-out
+           cursor-pointer;
+  }
+
+  .dark .glass-button-danger {
+    @apply from-red-500 to-rose-500;
+  }
+
+  /* Stats Card with Gradient */
+  .stats-card {
+    @apply glass-card p-6 text-center cursor-default
+           hover:scale-105 transition-transform duration-300;
+  }
+
+  /* Badge */
+  .badge {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    @apply px-3 py-1 rounded-full text-xs font-semibold
+           border transition-all duration-200;
+  }
+
+  .badge-success {
+    @apply badge bg-green-50/80 border-green-200 text-green-700;
+  }
+  .dark .badge-success {
+    @apply bg-green-900/30 border-green-700 text-green-400;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-50/80 border-yellow-200 text-yellow-700;
+  }
+  .dark .badge-warning {
+    @apply bg-yellow-900/30 border-yellow-700 text-yellow-400;
+  }
+
+  .badge-error {
+    @apply badge bg-red-50/80 border-red-200 text-red-700;
+  }
+  .dark .badge-error {
+    @apply bg-red-900/30 border-red-700 text-red-400;
+  }
+
+  .badge-info {
+    @apply badge bg-sky-50/80 border-sky-200 text-sky-700;
+  }
+  .dark .badge-info {
+    @apply bg-sky-900/30 border-sky-700 text-sky-400;
+  }
+
+  /* Progress Bar */
+  .progress-bar {
+    background: var(--bg-secondary);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--border-color);
+    @apply w-full h-3 rounded-full overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full bg-gradient-to-r from-sky-600 to-sky-500
+           transition-all duration-500 ease-out
+           shadow-lg shadow-sky-500/30;
+  }
+
+  /* Floating Animation */
+  .floating {
+    animation: floating 3s ease-in-out infinite;
+  }
+
+  @keyframes floating {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  /* Pulse Glow */
+  .pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
+    50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.8); }
+  }
+}
+
+@layer utilities {
+  /* Scrollbar Styling */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-sky-100/30 rounded-full;
+  }
+  .dark .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-slate-700/30;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-sky-300/50 rounded-full;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-sky-400/60;
+  }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-slate-500/50;
+  }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400/60;
+  }
+
+  /* Text Gradient */
+  .text-gradient {
+    @apply bg-gradient-to-r from-sky-600 via-blue-600 to-cyan-600
+           bg-clip-text text-transparent;
+  }
+  .dark .text-gradient {
+    @apply from-sky-400 via-blue-400 to-cyan-400;
+  }
+
+  /* Backdrop Blur Support */
+  @supports (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px)) {
+    .glass-card, .glass-input, .glass-button-secondary {
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

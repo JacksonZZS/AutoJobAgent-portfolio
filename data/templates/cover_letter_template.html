@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cover Letter</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2.5cm 2.5cm 2.5cm 2.5cm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+            background: #fff;
+        }
+
+        .cover-letter {
+            max-width: 100%;
+            padding: 0;
+        }
+
+        .content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .content p {
+            margin-bottom: 1em;
+            text-align: justify;
+        }
+    </style>
+</head>
+<body>
+    <div class="cover-letter">
+        <div class="content">{{ cover_letter }}</div>
+    </div>
+</body>
+</html>
