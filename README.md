@@ -2,6 +2,22 @@
 
 AI-assisted job application platform for resume tailoring, job discovery, manual-review workflows, and application material generation.
 
+## Portfolio Snapshot
+
+- Full-stack AI workflow product built with `FastAPI`, `React`, `TypeScript`, browser automation, and LLM-based orchestration
+- Designed for real-world reliability, with deterministic fallback extraction, human-in-the-loop review, and observable task progress
+- Strong portfolio example for `AI Engineer`, `Applied AI`, `Agentic AI`, and workflow automation roles
+
+## Why This Project Matters
+
+Most AI demos stop at text generation. This project focuses on the harder problem: turning a messy business workflow into a usable product with clear state, failure handling, review points, and downloadable outputs.
+
+The system is designed to show:
+
+- how LLM behavior can be wrapped in deterministic safeguards
+- how automation and human review can coexist in one workflow
+- how a multi-step AI application can be presented as a real product instead of a notebook demo
+
 This repository is the product codebase for a full-stack job search system built around three core ideas:
 
 - Resume-first automation: upload a base resume, analyze it, tailor it per role, and generate downloadable materials.
@@ -42,6 +58,14 @@ This repository is the product codebase for a full-stack job search system built
 - Market intelligence dashboards over collected jobs
 - Real-time task status updates via WebSocket
 
+## Hiring-Relevant Highlights
+
+- End-to-end AI application design: resume analysis, job matching, material generation, and operator review
+- Prompt-driven workflow logic with structured output recovery and fallback parsing
+- Browser automation and scraping integrated into a product workflow
+- Human-in-the-loop control for borderline decisions instead of blind automation
+- Product-facing frontend for observability, review, and workflow management
+
 ## Architecture
 
 ### Backend
@@ -81,17 +105,47 @@ flowchart LR
     MARKET --> STORE
 ```
 
-## Suggested Screenshots
+## Demo Gallery
 
-Add screenshots under `assets/screenshots/` and then link them here. Recommended set:
+The screenshots below come from the local portfolio demo flow and are redacted for public sharing.
 
-1. Dashboard task console
-2. Manual review decision card
-3. Resume optimizer with structured edit instructions
-4. Resume manager with saved variants
-5. Market intelligence page
+| View | What to show | Suggested file |
+| --- | --- | --- |
+| Dashboard | Task console, live progress, and review entry points | `assets/screenshots/dashboard-task-console.png` |
+| Manual Review | Borderline decision flow plus generated materials | `assets/screenshots/manual-review-card.png` |
+| Resume Optimizer | Structured `add / modify / delete` editing flow | `assets/screenshots/resume-optimizer.png` |
+| Resume Library | Saved variants and default resume management | `assets/screenshots/resume-library.png` |
+| Market Intelligence | Skills or trend analysis page | `assets/screenshots/market-intelligence.png` |
 
-See `assets/screenshots/README.md` for a capture checklist and redaction guidance.
+Capture and redaction guidance lives in `assets/screenshots/README.md`.
+
+Recommended sharing order:
+
+1. Dashboard
+2. Manual review
+3. Resume optimizer
+4. Resume library
+5. Market intelligence
+
+### Dashboard
+
+![Dashboard task console](assets/screenshots/dashboard-task-console.png)
+
+### Manual Review
+
+![Manual review queue](assets/screenshots/manual-review-card.png)
+
+### Resume Optimizer
+
+![Resume optimizer](assets/screenshots/resume-optimizer.png)
+
+### Resume Library
+
+![Resume library](assets/screenshots/resume-library.png)
+
+### Market Intelligence
+
+![Market intelligence](assets/screenshots/market-intelligence.png)
 
 ## Notable Engineering Decisions
 
@@ -176,6 +230,13 @@ If you plan to show this project to employers, the strongest demo path is:
 3. Show the resume optimizer generating role-specific variants.
 4. Show the resume library, history, and market intelligence pages.
 5. Walk through how LLM output is combined with deterministic fallback logic to avoid losing critical resume data.
+
+## What I Would Emphasize To Employers
+
+- This is a workflow product, not a single-model demo.
+- The difficult engineering work was reliability under messy inputs and fragile automation.
+- Manual review is a design choice, not a missing feature.
+- The project demonstrates backend systems work, frontend product implementation, and AI workflow design in one repository.
 
 ## Suggested Interview Narrative
 

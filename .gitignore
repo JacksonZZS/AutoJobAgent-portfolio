@@ -66,6 +66,8 @@ stealth_test.png
 
 # Cookies & sessions
 linkedin_cookies.json
+users.db
+data/users.db
 
 # Backend log
 backend.log
