@@ -1,5 +1,5 @@
 /**
- * 面试准备页面
+ * 候选人支持页面
  */
 
 import InterviewPrep from '@/components/InterviewPrep'

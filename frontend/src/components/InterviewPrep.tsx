@@ -1,5 +1,5 @@
 /**
- * 面试准备组件 - AI 生成面试题和答案练习
+ * 候选人支持组件 - AI 生成岗位问答与回答建议
  * 支持 JD 链接抓取 + 结合简历生成针对性问题
  */
 
@@ -136,7 +136,7 @@ export default function InterviewPrep() {
     }
   }
 
-  // 生成面试题
+  // 生成岗位相关问题
   const handleGenerate = async () => {
     if (!jobTitle.trim()) return
 
@@ -168,7 +168,7 @@ export default function InterviewPrep() {
         setExpandedQuestions(new Set([data.questions[0]?.id]))
       }
     } catch (error) {
-      console.error('生成面试题失败:', error)
+      console.error('生成岗位问题失败:', error)
     } finally {
       setLoading(false)
     }
@@ -248,8 +248,8 @@ export default function InterviewPrep() {
             <Brain className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-sky-900">面试准备</h1>
-            <p className="text-sm text-sky-600">AI 生成面试题，结合简历，针对性练习</p>
+            <h1 className="text-2xl font-bold text-sky-900">候选人支持</h1>
+            <p className="text-sm text-sky-600">AI 生成岗位相关问题与回答建议，辅助候选人准备申请材料</p>
           </div>
         </div>
       </div>
@@ -259,7 +259,7 @@ export default function InterviewPrep() {
         <div className="glass-card p-6">
           <h2 className="text-lg font-bold text-sky-900 mb-4 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-sky-600" />
-            生成面试题
+            生成岗位问题
           </h2>
 
           {/* JD 链接抓取 */}
@@ -309,7 +309,7 @@ export default function InterviewPrep() {
           <div className="mb-6 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
             <label className="block text-sm font-semibold text-emerald-800 mb-2 flex items-center gap-2">
               <FileText className="w-4 h-4" />
-              选择简历（生成针对性问题）
+              选择简历（生成针对性岗位问题）
             </label>
             {loadingResumes ? (
               <div className="flex items-center gap-2 text-emerald-600">
@@ -327,7 +327,7 @@ export default function InterviewPrep() {
                 onChange={(e) => setSelectedResumeId(e.target.value)}
                 className="glass-input"
               >
-                <option value="">不使用简历（通用问题）</option>
+                <option value="">不使用简历（通用岗位问题）</option>
                 {resumes.map(resume => (
                   <option key={resume.id} value={resume.id}>
                     {resume.filename}
@@ -338,7 +338,7 @@ export default function InterviewPrep() {
               </select>
             )}
             <p className="text-xs text-emerald-500 mt-2">
-              选择简历后，AI 会根据你的经历生成针对性的面试问题
+              选择简历后，AI 会根据你的经历生成更贴近岗位要求的问题
             </p>
           </div>
 
@@ -374,12 +374,12 @@ export default function InterviewPrep() {
             {/* 职位描述 */}
             <div className="md:col-span-2">
               <label className="block text-sm font-semibold text-sky-800 mb-2">
-                职位描述（可选，更精准的题目）
+                职位描述（可选，生成更精准的问题）
               </label>
               <textarea
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="粘贴职位描述，AI 会根据具体要求生成更有针对性的面试题..."
+                placeholder="粘贴职位描述，AI 会根据具体要求生成更有针对性的问题..."
                 className="glass-input min-h-[100px] resize-none"
               />
             </div>
@@ -464,13 +464,13 @@ export default function InterviewPrep() {
             ) : (
               <>
                 <Brain className="w-5 h-5" />
-                生成面试题
+                生成岗位问题
               </>
             )}
           </button>
         </div>
       ) : (
-        /* 面试题列表 */
+        /* 岗位问题列表 */
         <>
           {/* 统计信息 */}
           <div className="glass-card p-4">

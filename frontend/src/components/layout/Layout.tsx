@@ -54,12 +54,12 @@ const navGroups = [
   },
   {
     id: 'prepare',
-    label: '面试准备',
+    label: '候选人支持',
     icon: GraduationCap,
     color: 'from-purple-600 to-pink-500',
     shadowColor: 'shadow-purple-500/30',
     submenu: [
-      { id: 'interview', label: '面试题库', href: '/interview', icon: Brain },
+      { id: 'candidate-support', label: '岗位问答助手', href: '/candidate-support', icon: Brain },
       { id: 'optimizer', label: '简历优化', href: '/optimizer', icon: Sparkles },
       { id: 'resumes', label: '简历管理', href: '/resumes', icon: FileText },
     ]
