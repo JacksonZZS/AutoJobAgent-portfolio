@@ -22,7 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 
-interface InterviewQuestion {
+interface CandidateSupportQuestion {
   id: number
   category: string
   question: string
@@ -45,7 +45,7 @@ interface Resume {
   is_default: boolean
 }
 
-export default function InterviewPrep() {
+export default function CandidateSupport() {
   // JD 链接相关
   const [jdUrl, setJdUrl] = useState('')
   const [fetchingJd, setFetchingJd] = useState(false)
@@ -66,7 +66,7 @@ export default function InterviewPrep() {
 
   // 生成状态
   const [loading, setLoading] = useState(false)
-  const [questions, setQuestions] = useState<InterviewQuestion[]>([])
+  const [questions, setQuestions] = useState<CandidateSupportQuestion[]>([])
   const [resumeUsed, setResumeUsed] = useState(false)
   const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(new Set())
   const [userAnswers, setUserAnswers] = useState<Record<number, string>>({})

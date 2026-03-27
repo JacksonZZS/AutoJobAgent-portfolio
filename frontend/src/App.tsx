@@ -7,7 +7,7 @@ import HistoryPage from './pages/HistoryPage'
 import ResumeOptimizerPage from './pages/ResumeOptimizerPage'
 import FavoritesPage from './pages/FavoritesPage'
 import StatisticsPage from './pages/StatisticsPage'
-import InterviewPrepPage from './pages/InterviewPrepPage'
+import CandidateSupportPage from './pages/CandidateSupportPage'
 import ResumeManagerPage from './pages/ResumeManagerPage'
 import EmailSettingsPage from './pages/EmailSettingsPage'
 import MarketIntelligencePage from './pages/MarketIntelligencePage'
@@ -33,7 +33,7 @@ function App() {
           <Route path="optimizer" element={<ResumeOptimizerPage />} />
           <Route path="favorites" element={<FavoritesPage />} />
           <Route path="statistics" element={<StatisticsPage />} />
-          <Route path="candidate-support" element={<InterviewPrepPage />} />
+          <Route path="candidate-support" element={<CandidateSupportPage />} />
           <Route path="interview" element={<Navigate to="/candidate-support" replace />} />
           <Route path="resumes" element={<ResumeManagerPage />} />
           <Route path="email-settings" element={<EmailSettingsPage />} />
