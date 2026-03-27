@@ -41,7 +41,7 @@ This repository is the product codebase for a full-stack job search system built
 
 ### 3. Candidate operating system
 - Resume library with labels and default version management.
-- Application history, favorites, statistics, and interview prep pages.
+- Application history, favorites, statistics, and candidate support pages.
 - Real-time WebSocket task updates and manual-review actions.
 - Market intelligence views built from collected job history.
 
@@ -54,7 +54,7 @@ This repository is the product codebase for a full-stack job search system built
 - Manual review queue for borderline job decisions
 - Multi-resume management with saved variants
 - Task history, favorites, and summary statistics
-- Interview preparation utilities
+- Candidate-support utilities
 - Market intelligence dashboards over collected jobs
 - Real-time task status updates via WebSocket
 
@@ -76,7 +76,7 @@ This repository is the product codebase for a full-stack job search system built
 
 ### Frontend
 - `React + TypeScript + Vite` SPA in `frontend/src/`
-- Protected app shell with pages for dashboard, optimizer, resume manager, history, statistics, favorites, interview prep, and market intelligence
+- Protected app shell with pages for dashboard, optimizer, resume manager, history, statistics, favorites, candidate-support tools, and market intelligence
 - WebSocket-driven task console on the dashboard
 
 ### AI / Automation Layer
@@ -219,11 +219,12 @@ If you are creating a public GitHub repository from a previously used private/lo
 Additional public-sharing materials:
 
 - `PUBLIC_REPO_CHECKLIST.md` for final pre-push verification
-- `GITHUB_SHOWCASE_COPY.md` for GitHub description, LinkedIn copy, and interview narrative
+- `GITHUB_SHOWCASE_COPY.md` for GitHub description, LinkedIn copy, and employer-facing project summary
+- `PROJECT_PRESENTATION_GUIDE.md` for a concise walkthrough you can reuse with recruiters, hiring managers, or technical reviewers
 
-## Demo Guidance For Interviews
+## Demo Guidance For Reviewers
 
-If you plan to show this project to employers, the strongest demo path is:
+If you plan to show this project to employers, recruiters, or hiring managers, the strongest demo path is:
 
 1. Explain the user problem: repetitive job search and resume tailoring.
 2. Show the dashboard task flow and manual-review loop.
@@ -238,9 +239,9 @@ If you plan to show this project to employers, the strongest demo path is:
 - Manual review is a design choice, not a missing feature.
 - The project demonstrates backend systems work, frontend product implementation, and AI workflow design in one repository.
 
-## Suggested Interview Narrative
+## Suggested Project Narrative
 
-If you are presenting this project in an interview, a strong structure is:
+If you are presenting this project to a reviewer, a strong structure is:
 
 1. Problem
 Explain why job search automation is difficult: noisy job descriptions, repetitive resume edits, fragile browser automation, and the need for human review.
