@@ -88,11 +88,11 @@ async def generate_thank_you_content(
     AI 生成感谢信内容
     TODO: 集成 Claude/GPT API
     """
-    content = f"""非常感谢您今天抽出宝贵时间与我进行 {job_title} 职位的面试。
+    content = f"""非常感谢您今天抽出宝贵时间与我就 {job_title} 职位进行沟通。
 
 通过今天的交流，我对 {company} 有了更深入的了解，也更加期待能够加入贵公司的团队。
 
-面试中讨论的项目和团队文化都让我印象深刻，我相信我的技能和经验能够为团队带来价值。
+我们讨论的项目和团队文化都让我印象深刻，我相信我的技能和经验能够为团队带来价值。
 
 再次感谢您的时间和考虑，期待收到您的好消息！"""
 
@@ -132,7 +132,7 @@ async def generate_email(
             user_name=user_name,
             additional_context=request.additional_context
         )
-        subject = f"感谢信 - {request.job_title} 面试 - {user_name}"
+        subject = f"感谢信 - {request.job_title} 职位沟通 - {user_name}"
     
     else:
         raise HTTPException(status_code=400, detail="不支持的邮件类型")

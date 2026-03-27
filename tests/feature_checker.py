@@ -139,7 +139,7 @@ class FeatureChecker:
             ("获取投递历史", "GET", "/api/v1/history/", None, True),
             ("获取统计数据", "GET", "/api/v1/statistics/dashboard", None, True),
             ("获取收藏列表", "GET", "/api/v1/favorites/", None, True),
-            ("面试题分类", "GET", "/api/v1/interview/categories", None, True),
+            ("岗位问答分类", "GET", "/api/v1/candidate-support/categories", None, True),
             ("邮件配置", "GET", "/api/v1/email/config", None, True),
             
             # 文件下载 (使用示例文件名)

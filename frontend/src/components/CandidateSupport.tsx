@@ -110,7 +110,7 @@ export default function CandidateSupport() {
     setJdError('')
 
     try {
-      const response = await fetch('/api/v1/interview/fetch-jd', {
+      const response = await fetch('/api/v1/candidate-support/fetch-jd', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -142,7 +142,7 @@ export default function CandidateSupport() {
 
     setLoading(true)
     try {
-      const response = await fetch('/api/v1/interview/generate', {
+      const response = await fetch('/api/v1/candidate-support/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -181,7 +181,7 @@ export default function CandidateSupport() {
 
     setEvaluating(questionId)
     try {
-      const response = await fetch('/api/v1/interview/evaluate', {
+      const response = await fetch('/api/v1/candidate-support/evaluate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

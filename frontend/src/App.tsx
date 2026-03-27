@@ -34,7 +34,6 @@ function App() {
           <Route path="favorites" element={<FavoritesPage />} />
           <Route path="statistics" element={<StatisticsPage />} />
           <Route path="candidate-support" element={<CandidateSupportPage />} />
-          <Route path="interview" element={<Navigate to="/candidate-support" replace />} />
           <Route path="resumes" element={<ResumeManagerPage />} />
           <Route path="email-settings" element={<EmailSettingsPage />} />
           <Route path="market-intelligence" element={<MarketIntelligencePage />} />

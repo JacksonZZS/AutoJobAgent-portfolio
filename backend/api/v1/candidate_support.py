@@ -1,6 +1,6 @@
 """
-面试题库 API - AI 生成面试题目和答案
-支持 JD 链接抓取 + 结合简历生成个性化面试题
+岗位问答支持 API - AI 生成岗位相关问题和回答建议
+支持 JD 链接抓取 + 结合简历生成个性化岗位问题
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,7 +13,7 @@ import re
 from backend.api.v1.auth import get_current_user
 from backend.models.schemas import UserInfo
 
-router = APIRouter(prefix="/interview", tags=["Interview"])
+router = APIRouter(prefix="/candidate-support", tags=["Candidate Support"])
 
 
 # ==================== 数据模型 ====================
@@ -33,7 +33,7 @@ class FetchJDResponse(BaseModel):
 
 
 class GenerateQuestionsRequest(BaseModel):
-    """生成面试题请求"""
+    """生成岗位问题请求"""
     job_title: str = Field(..., description="职位名称")
     company: Optional[str] = Field(None, description="公司名称")
     job_description: Optional[str] = Field(None, description="职位描述")
@@ -46,8 +46,8 @@ class GenerateQuestionsRequest(BaseModel):
     count: int = Field(10, ge=5, le=30, description="题目数量")
 
 
-class InterviewQuestion(BaseModel):
-    """面试题目"""
+class CandidateSupportQuestion(BaseModel):
+    """岗位相关问题"""
     id: int
     category: str  # technical, behavioral, situational, resume_based
     question: str
@@ -57,10 +57,10 @@ class InterviewQuestion(BaseModel):
 
 
 class GenerateQuestionsResponse(BaseModel):
-    """生成面试题响应"""
+    """生成岗位问题响应"""
     job_title: str
     total_questions: int
-    questions: List[InterviewQuestion]
+    questions: List[CandidateSupportQuestion]
     resume_used: bool = False
 
 
@@ -314,8 +314,8 @@ async def get_resume_content(user_id: str, resume_id: Optional[str] = None) -> O
 
 # ==================== AI 生成函数 ====================
 
-INTERVIEW_PROMPT_WITH_RESUME = """
-你是一位资深的技术面试官和HR专家。请根据以下信息生成面试题目：
+CANDIDATE_SUPPORT_PROMPT_WITH_RESUME = """
+你是一位资深招聘顾问和岗位评估专家。请根据以下信息生成岗位相关问题与回答建议：
 
 ## 职位信息
 - 职位：{job_title}
@@ -327,7 +327,7 @@ INTERVIEW_PROMPT_WITH_RESUME = """
 {resume_content}
 
 ## 要求
-请生成 {count} 道面试题，包含以下类型：
+请生成 {count} 道岗位相关问题，包含以下类型：
 1. 技术题 (technical): 根据职位要求和简历中的技术栈，考察专业技能
 2. 行为题 (behavioral): 根据简历中的项目经历，深入追问细节
 3. 情景题 (situational): 考察解决问题的能力
@@ -350,11 +350,11 @@ INTERVIEW_PROMPT_WITH_RESUME = """
 }}
 ```
 
-请确保问题与候选人的实际经历相关，而不是泛泛的模板问题。
+请确保问题与候选人的实际经历和岗位要求相关，而不是泛泛的模板问题。
 """
 
-INTERVIEW_PROMPT_WITHOUT_RESUME = """
-你是一位资深的技术面试官和HR专家。请根据以下职位信息生成面试题目：
+CANDIDATE_SUPPORT_PROMPT_WITHOUT_RESUME = """
+你是一位资深招聘顾问和岗位评估专家。请根据以下职位信息生成岗位相关问题与回答建议：
 
 ## 职位信息
 - 职位：{job_title}
@@ -363,7 +363,7 @@ INTERVIEW_PROMPT_WITHOUT_RESUME = """
 {job_description}
 
 ## 要求
-请生成 {count} 道面试题，包含以下类型：
+请生成 {count} 道岗位相关问题，包含以下类型：
 1. 技术题 (technical): 考察专业技能和知识
 2. 行为题 (behavioral): 考察过往经历和行为模式
 3. 情景题 (situational): 考察解决问题的能力
@@ -386,10 +386,10 @@ INTERVIEW_PROMPT_WITHOUT_RESUME = """
 ```
 """
 
-EVALUATE_ANSWER_PROMPT = """
-你是一位资深面试官，请评估以下面试回答：
+CANDIDATE_SUPPORT_EVALUATION_PROMPT = """
+你是一位资深招聘顾问，请评估以下候选人回答：
 
-## 面试问题
+## 岗位问题
 {question}
 
 ## 候选人回答
@@ -416,7 +416,7 @@ EVALUATE_ANSWER_PROMPT = """
 """
 
 
-async def generate_interview_questions(
+async def generate_candidate_support_questions(
     job_title: str,
     company: Optional[str],
     job_description: Optional[str],
@@ -424,14 +424,14 @@ async def generate_interview_questions(
     difficulty: str,
     count: int,
     resume_content: Optional[str] = None
-) -> tuple[List[InterviewQuestion], bool]:
+) -> tuple[List[CandidateSupportQuestion], bool]:
     """
-    AI 生成面试题
+    AI 生成岗位相关问题
     返回 (问题列表, 是否使用了简历)
     """
     # 构建 Prompt
     if resume_content:
-        prompt = INTERVIEW_PROMPT_WITH_RESUME.format(
+        prompt = CANDIDATE_SUPPORT_PROMPT_WITH_RESUME.format(
             job_title=job_title,
             company=company or "未知",
             job_description=job_description or "无详细描述",
@@ -441,7 +441,7 @@ async def generate_interview_questions(
         )
         resume_used = True
     else:
-        prompt = INTERVIEW_PROMPT_WITHOUT_RESUME.format(
+        prompt = CANDIDATE_SUPPORT_PROMPT_WITHOUT_RESUME.format(
             job_title=job_title,
             company=company or "未知",
             job_description=job_description or "无详细描述",
@@ -458,7 +458,7 @@ async def generate_interview_questions(
         if parsed and "questions" in parsed:
             questions = []
             for i, q in enumerate(parsed["questions"][:count], 1):
-                questions.append(InterviewQuestion(
+                questions.append(CandidateSupportQuestion(
                     id=i,
                     category=q.get("category", "technical"),
                     question=q.get("question", ""),
@@ -477,7 +477,7 @@ def generate_fallback_questions(
     question_types: List[str],
     difficulty: str,
     count: int
-) -> List[InterviewQuestion]:
+) -> List[CandidateSupportQuestion]:
     """
     备用模板问题（当 AI 调用失败时）
     """
@@ -515,7 +515,7 @@ def generate_fallback_questions(
 
     if "technical" in question_types:
         for q in tech_questions:
-            questions.append(InterviewQuestion(
+            questions.append(CandidateSupportQuestion(
                 id=question_id,
                 category="technical",
                 question=q["question"],
@@ -527,7 +527,7 @@ def generate_fallback_questions(
 
     if "behavioral" in question_types:
         for q in behavioral_questions:
-            questions.append(InterviewQuestion(
+            questions.append(CandidateSupportQuestion(
                 id=question_id,
                 category="behavioral",
                 question=q["question"],
@@ -539,7 +539,7 @@ def generate_fallback_questions(
 
     if "situational" in question_types:
         for q in situational_questions:
-            questions.append(InterviewQuestion(
+            questions.append(CandidateSupportQuestion(
                 id=question_id,
                 category="situational",
                 question=q["question"],
@@ -556,7 +556,7 @@ async def evaluate_answer(question: str, user_answer: str) -> dict:
     """
     AI 评估用户答案
     """
-    prompt = EVALUATE_ANSWER_PROMPT.format(
+    prompt = CANDIDATE_SUPPORT_EVALUATION_PROMPT.format(
         question=question,
         user_answer=user_answer
     )
@@ -612,7 +612,7 @@ async def generate_questions(
     current_user: UserInfo = Depends(get_current_user)
 ):
     """
-    根据职位信息生成面试题
+    根据职位信息生成岗位相关问题
     如果提供 resume_id，会结合简历生成针对性问题
     """
     # 获取简历内容
@@ -623,7 +623,7 @@ async def generate_questions(
             request.resume_id
         )
 
-    questions, resume_used = await generate_interview_questions(
+    questions, resume_used = await generate_candidate_support_questions(
         job_title=request.job_title,
         company=request.company,
         job_description=request.job_description,
