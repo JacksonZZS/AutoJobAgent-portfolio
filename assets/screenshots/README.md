@@ -1,6 +1,6 @@
 # Screenshot Guide
 
-Add redacted product screenshots to this folder before sharing the repository with employers.
+Add redacted product screenshots to this folder before sharing the repository publicly.
 
 Recommended files:
 

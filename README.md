@@ -58,7 +58,7 @@ This repository is the product codebase for a full-stack job search system built
 - Market intelligence dashboards over collected jobs
 - Real-time task status updates via WebSocket
 
-## Hiring-Relevant Highlights
+## Portfolio Highlights
 
 - End-to-end AI application design: resume analysis, job matching, material generation, and operator review
 - Prompt-driven workflow logic with structured output recovery and fallback parsing
@@ -219,12 +219,12 @@ If you are creating a public GitHub repository from a previously used private/lo
 Additional public-sharing materials:
 
 - `PUBLIC_REPO_CHECKLIST.md` for final pre-push verification
-- `GITHUB_SHOWCASE_COPY.md` for GitHub description, LinkedIn copy, and employer-facing project summary
-- `PROJECT_PRESENTATION_GUIDE.md` for a concise walkthrough you can reuse with recruiters, hiring managers, or technical reviewers
+- `GITHUB_SHOWCASE_COPY.md` for GitHub description, LinkedIn copy, and public project summary
+- `PROJECT_PRESENTATION_GUIDE.md` for a concise public project overview
 
-## Demo Guidance For Reviewers
+## Suggested Demo Flow
 
-If you plan to show this project to employers, recruiters, or hiring managers, the strongest demo path is:
+If you plan to show this project publicly, the strongest demo path is:
 
 1. Explain the user problem: repetitive job search and resume tailoring.
 2. Show the dashboard task flow and manual-review loop.
@@ -232,37 +232,12 @@ If you plan to show this project to employers, recruiters, or hiring managers, t
 4. Show the resume library, history, and market intelligence pages.
 5. Walk through how LLM output is combined with deterministic fallback logic to avoid losing critical resume data.
 
-## What I Would Emphasize To Employers
+## Project Positioning
 
 - This is a workflow product, not a single-model demo.
 - The difficult engineering work was reliability under messy inputs and fragile automation.
 - Manual review is a design choice, not a missing feature.
 - The project demonstrates backend systems work, frontend product implementation, and AI workflow design in one repository.
-
-## Suggested Project Narrative
-
-If you are presenting this project to a reviewer, a strong structure is:
-
-1. Problem
-Explain why job search automation is difficult: noisy job descriptions, repetitive resume edits, fragile browser automation, and the need for human review.
-
-2. Product Scope
-Show that this is not just a script. It is a full-stack system with authentication, stateful workflows, file generation, history, and analytics.
-
-3. Hard Engineering Problems
-Highlight the non-trivial parts:
-
-- LLM JSON reliability and fallback parsing
-- resume data integrity during optimization
-- browser automation and anti-detection constraints
-- human-in-the-loop review for low-confidence decisions
-- multi-version resume management
-
-4. Your Contribution
-Emphasize architecture, implementation, debugging, and iteration, not just feature count.
-
-5. Tradeoffs
-Be explicit that this is a product prototype focused on workflow depth and systems integration rather than polished multi-environment deployment.
 
 ## Current State
 
