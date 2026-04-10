@@ -43,7 +43,7 @@ if [ ! -f .env ]; then
     if [ -f .env.example ]; then
         echo -e "${YELLOW}⚠️  未找到 .env 文件，从模板创建...${NC}"
         cp .env.example .env
-        echo -e "${RED}❗ 请编辑 .env 文件，填入你的 ANTHROPIC_API_KEY${NC}"
+        echo -e "${RED}❗ 请编辑 .env 文件，填入你的 GOOGLE_API_KEY${NC}"
         echo "   nano .env"
         exit 1
     else
@@ -53,8 +53,8 @@ if [ ! -f .env ]; then
 fi
 
 # Check if API key is set
-if grep -q "sk-ant-xxxxx" .env; then
-    echo -e "${RED}❗ 请先在 .env 中设置你的 ANTHROPIC_API_KEY${NC}"
+if grep -Eq '^GOOGLE_API_KEY=(|your-google-gemini-api-key)$' .env; then
+    echo -e "${RED}❗ 请先在 .env 中设置你的 GOOGLE_API_KEY${NC}"
     exit 1
 fi
 

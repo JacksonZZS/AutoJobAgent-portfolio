@@ -33,7 +33,7 @@ echo "🔍 检查环境变量..."
 if [ ! -f .env ]; then
     echo "⚠️ 未找到 .env 文件"
     echo "请创建 .env 文件并配置以下变量:"
-    echo "  ANTHROPIC_API_KEY=your_key"
+    echo "  GOOGLE_API_KEY=your-google-gemini-api-key"
     echo "  JOBSDB_USERNAME=your_email"
     echo "  JOBSDB_PASSWORD=your_password"
     exit 1

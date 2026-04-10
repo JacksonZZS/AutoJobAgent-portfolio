@@ -164,6 +164,7 @@ export default function DashboardPage() {
             <JobReviewCard
               currentJob={taskStatus.current_job}
               manualReviewData={taskStatus.manual_review_data}
+              queueLength={taskStatus.manual_review_queue?.length ?? (taskStatus.manual_review_data ? 1 : 0)}
               loadingPdf={pdf.loadingPdf}
               onOpenJdSidebar={() => setShowJdSidebar(true)}
               onOpenResumePreview={() => {

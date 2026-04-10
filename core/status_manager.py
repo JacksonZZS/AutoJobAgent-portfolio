@@ -14,6 +14,21 @@ from enum import Enum
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_STATS = {
+    "total_seen": 0,
+    "total_processed": 0,
+    "filtered_history": 0,
+    "filtered_title": 0,
+    "filtered_company": 0,
+    "rejected_low_score": 0,
+    "failed_scoring": 0,
+    "manual_review": 0,
+    "success": 0,
+    "skipped": 0,
+    "failed": 0,
+}
+
+
 class TaskStatus(Enum):
     """任务状态枚举"""
     IDLE = "idle"                      # 空闲
@@ -85,12 +100,7 @@ class StatusManager:
                 "message": "系统就绪",
                 "progress": 0,
                 "current_job": None,
-                "stats": {
-                    "total_processed": 0,
-                    "success": 0,
-                    "skipped": 0,
-                    "failed": 0
-                },
+                "stats": DEFAULT_STATS.copy(),
                 "last_updated": datetime.now().isoformat()
             })
 
@@ -138,12 +148,7 @@ class StatusManager:
                     "message": "系统就绪",
                     "progress": 0,
                     "current_job": None,
-                    "stats": {
-                        "total_processed": 0,
-                        "success": 0,
-                        "skipped": 0,
-                        "failed": 0
-                    },
+                    "stats": DEFAULT_STATS.copy(),
                     "last_updated": datetime.now().isoformat()
                 }
         except Exception as e:
@@ -182,23 +187,27 @@ class StatusManager:
             "message": message,
             "progress": max(0, min(100, progress)),  # 限制在 0-100
             "current_job": current_job,
-            "stats": current_data.get("stats", {
-                "total_processed": 0,
-                "success": 0,
-                "skipped": 0,
-                "failed": 0
-            })
+            "stats": {**DEFAULT_STATS, **current_data.get("stats", {})}
         }
 
         # 🔴 修复：保留 manual_review_data（避免被覆盖导致前端下载按钮消失）
         if "manual_review_data" in current_data:
             data["manual_review_data"] = current_data["manual_review_data"]
+        if "manual_review_queue" in current_data:
+            data["manual_review_queue"] = current_data["manual_review_queue"]
 
         self._write_status(data)
 
     def update_stats(
         self,
+        total_seen: Optional[int] = None,
         total_processed: Optional[int] = None,
+        filtered_history: Optional[int] = None,
+        filtered_title: Optional[int] = None,
+        filtered_company: Optional[int] = None,
+        rejected_low_score: Optional[int] = None,
+        failed_scoring: Optional[int] = None,
+        manual_review: Optional[int] = None,
         success: Optional[int] = None,
         skipped: Optional[int] = None,
         failed: Optional[int] = None
@@ -207,16 +216,37 @@ class StatusManager:
         更新统计数据
 
         Args:
+            total_seen: 扫描到的职位数
             total_processed: 总处理数
+            filtered_history: 因历史记录跳过
+            filtered_title: 因标题过滤跳过
+            filtered_company: 因公司黑名单跳过
+            rejected_low_score: 低分拒绝数
+            failed_scoring: 评分失败数
+            manual_review: 进入人工复核数
             success: 成功数
             skipped: 跳过数
             failed: 失败数
         """
         current_data = self.read_status()
-        stats = current_data.get("stats", {})
+        stats = {**DEFAULT_STATS, **current_data.get("stats", {})}
 
+        if total_seen is not None:
+            stats["total_seen"] = total_seen
         if total_processed is not None:
             stats["total_processed"] = total_processed
+        if filtered_history is not None:
+            stats["filtered_history"] = filtered_history
+        if filtered_title is not None:
+            stats["filtered_title"] = filtered_title
+        if filtered_company is not None:
+            stats["filtered_company"] = filtered_company
+        if rejected_low_score is not None:
+            stats["rejected_low_score"] = rejected_low_score
+        if failed_scoring is not None:
+            stats["failed_scoring"] = failed_scoring
+        if manual_review is not None:
+            stats["manual_review"] = manual_review
         if success is not None:
             stats["success"] = success
         if skipped is not None:
@@ -232,15 +262,10 @@ class StatusManager:
         增加统计计数
 
         Args:
-            stat_name: 统计项名称 (total_processed, success, skipped, failed)
+            stat_name: 统计项名称
         """
         current_data = self.read_status()
-        stats = current_data.get("stats", {
-            "total_processed": 0,
-            "success": 0,
-            "skipped": 0,
-            "failed": 0
-        })
+        stats = {**DEFAULT_STATS, **current_data.get("stats", {})}
 
         if stat_name in stats:
             stats[stat_name] += 1
@@ -256,12 +281,7 @@ class StatusManager:
             "message": "系统就绪",
             "progress": 0,
             "current_job": None,
-            "stats": {
-                "total_processed": 0,
-                "success": 0,
-                "skipped": 0,
-                "failed": 0
-            }
+            "stats": DEFAULT_STATS.copy()
             # 🔴 注意：不包含 manual_review_data，会被自动清除
         })
 
@@ -555,6 +575,10 @@ class StatusManager:
             }
         })
 
+        queue = current_data.get("manual_review_queue", [])
+        queue.append(current_data["manual_review_data"])
+        current_data["manual_review_queue"] = queue
+
         self._write_status(current_data)
 
         # 🔴 [DEBUG] 验证写入结果
@@ -583,6 +607,9 @@ class StatusManager:
 
         if "manual_review_data" in current_data:
             current_data["manual_review_data"]["decision"] = decision
+            queue = current_data.get("manual_review_queue", [])
+            if queue:
+                queue[0]["decision"] = decision
             self._write_status(current_data)
             logger.info(f"Manual decision set: {decision}")
 
@@ -600,9 +627,21 @@ class StatusManager:
     def clear_manual_review(self) -> None:
         """清除人工复核数据"""
         current_data = self.read_status()
-        if "manual_review_data" in current_data:
+        queue = current_data.get("manual_review_queue", [])
+        if queue:
+            queue.pop(0)
+            current_data["manual_review_queue"] = queue
+
+            if queue:
+                current_data["manual_review_data"] = queue[0]
+                current_data["status"] = TaskStatus.MANUAL_REVIEW.value
+                current_data["step"] = "manual_review"
+                current_data["message"] = f"⚠️ 还有 {len(queue)} 个职位待人工复核"
+            elif "manual_review_data" in current_data:
+                del current_data["manual_review_data"]
+        elif "manual_review_data" in current_data:
             del current_data["manual_review_data"]
-            self._write_status(current_data)
+        self._write_status(current_data)
 
 
 # 全局单例实例字典（支持多用户）

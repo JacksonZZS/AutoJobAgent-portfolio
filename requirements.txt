@@ -1,8 +1,8 @@
 # Core Dependencies
-# ⚠️ 锁定 0.50.0 - 新版本 (0.51+) 的 httpx 行为与反代不兼容，会导致 502 错误
-anthropic==0.50.0
+google-genai>=1.12.1
 python-dotenv>=1.0.0
 json-repair>=0.25.0  # Robust JSON parsing for LLM outputs
+httpx>=0.27.0
 
 # Web Automation
 playwright>=1.40.0

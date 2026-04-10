@@ -7,13 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import os
-import json
-import re
+import logging
 
 from backend.api.v1.auth import get_current_user
 from backend.models.schemas import UserInfo
+from core.llm_engine import LLMEngine
 
 router = APIRouter(prefix="/candidate-support", tags=["Candidate Support"])
+logger = logging.getLogger(__name__)
 
 
 # ==================== 数据模型 ====================
@@ -81,69 +82,22 @@ class AnswerFeedbackResponse(BaseModel):
 
 # ==================== LLM 集成 ====================
 
-async def call_claude_api(prompt: str) -> str:
+async def call_gemini_json(prompt: str) -> dict:
     """
-    调用 Claude API
+    调用 Gemini API 并返回解析后的 JSON
     """
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(
-            api_key=os.getenv("ANTHROPIC_API_KEY")
-        )
-
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+        llm = LLMEngine()
+        response = llm._call_ai(
+            system_prompt="你是一位资深招聘顾问。请严格返回有效 JSON，不要输出 Markdown。",
+            user_prompt=prompt,
             max_tokens=4096,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            temperature=0.2,
         )
-
-        return message.content[0].text
+        return response if isinstance(response, dict) else {}
     except Exception as e:
-        print(f"Claude API 调用失败: {e}")
-        return ""
-
-
-def parse_json_response(response: str) -> dict:
-    """
-    4层容错 JSON 解析
-    """
-    # Layer 1: 标准解析
-    try:
-        return json.loads(response)
-    except:
-        pass
-
-    # Layer 2: 修复常见问题
-    fixed = response.replace("'", '"')
-    fixed = re.sub(r',\s*}', '}', fixed)
-    fixed = re.sub(r',\s*]', ']', fixed)
-    fixed = re.sub(r'\bTrue\b', 'true', fixed)
-    fixed = re.sub(r'\bFalse\b', 'false', fixed)
-    try:
-        return json.loads(fixed)
-    except:
-        pass
-
-    # Layer 3: 正则提取
-    json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', response)
-    if json_match:
-        try:
-            return json.loads(json_match.group(1))
-        except:
-            pass
-
-    brace_match = re.search(r'\{[\s\S]*\}', response)
-    if brace_match:
-        try:
-            return json.loads(brace_match.group())
-        except:
-            pass
-
-    # Layer 4: 返回空
-    return {}
+        logger.error("Gemini API 调用失败: %s", e)
+        return {}
 
 
 # ==================== JD 抓取 ====================
@@ -450,23 +404,19 @@ async def generate_candidate_support_questions(
         )
         resume_used = False
 
-    # 调用 Claude API
-    response = await call_claude_api(prompt)
-
-    if response:
-        parsed = parse_json_response(response)
-        if parsed and "questions" in parsed:
-            questions = []
-            for i, q in enumerate(parsed["questions"][:count], 1):
-                questions.append(CandidateSupportQuestion(
-                    id=i,
-                    category=q.get("category", "technical"),
-                    question=q.get("question", ""),
-                    suggested_answer=q.get("suggested_answer", ""),
-                    tips=q.get("tips", []),
-                    difficulty=difficulty
-                ))
-            return questions, resume_used
+    parsed = await call_gemini_json(prompt)
+    if parsed and "questions" in parsed:
+        questions = []
+        for i, q in enumerate(parsed["questions"][:count], 1):
+            questions.append(CandidateSupportQuestion(
+                id=i,
+                category=q.get("category", "technical"),
+                question=q.get("question", ""),
+                suggested_answer=q.get("suggested_answer", ""),
+                tips=q.get("tips", []),
+                difficulty=difficulty
+            ))
+        return questions, resume_used
 
     # 如果 AI 调用失败，返回模板问题
     return generate_fallback_questions(job_title, question_types, difficulty, count), False
@@ -561,12 +511,9 @@ async def evaluate_answer(question: str, user_answer: str) -> dict:
         user_answer=user_answer
     )
 
-    response = await call_claude_api(prompt)
-
-    if response:
-        parsed = parse_json_response(response)
-        if parsed and "score" in parsed:
-            return parsed
+    parsed = await call_gemini_json(prompt)
+    if parsed and "score" in parsed:
+        return parsed
 
     # 备用评估
     return {

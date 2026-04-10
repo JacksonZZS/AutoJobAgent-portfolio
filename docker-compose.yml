@@ -15,9 +15,10 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gemini-3-flash-preview}
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-key-change-in-production}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - APP_ENV=${APP_ENV:-production}
     volumes:
       # Persist user data
       - ./data/uploads:/app/data/uploads

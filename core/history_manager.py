@@ -141,7 +141,8 @@ class HistoryManager:
         return self.is_processed(job_id_or_link)
 
     def add_job(self, link, title, company, status="processed", score=None, reason=None, resume_path=None, cl_path=None,
-                jd_content=None, location=None, salary_raw=None, extracted_skills=None, platform=None):
+                jd_content=None, location=None, salary_raw=None, extracted_skills=None, platform=None,
+                base_resume_label=None, base_resume_filename=None):
         """
         标记这个职位为已处理
 
@@ -166,6 +167,8 @@ class HistoryManager:
             salary_raw: 薪资原始字符串（可选）
             extracted_skills: 提取的技能列表（可选）
             platform: 平台名称（可选，auto-detect from link）
+            base_resume_label: 使用的基础简历标签（可选）
+            base_resume_filename: 使用的基础简历文件名（可选）
         """
         job_id = self.get_job_id(link)
         cleaned_link = clean_job_url(link)
@@ -190,6 +193,10 @@ class HistoryManager:
             record["resume_path"] = resume_path
         if cl_path:
             record["cl_path"] = cl_path
+        if base_resume_label:
+            record["base_resume_label"] = base_resume_label
+        if base_resume_filename:
+            record["base_resume_filename"] = base_resume_filename
 
         # 🔴 新增：Market Intelligence 字段
         if jd_content:

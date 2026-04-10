@@ -172,7 +172,14 @@ class StartTaskResponse(BaseModel):
 
 class TaskStats(BaseModel):
     """任务统计数据"""
+    total_seen: int = Field(default=0, description="扫描到的职位数")
     total_processed: int = Field(default=0, description="总处理数")
+    filtered_history: int = Field(default=0, description="因历史记录跳过")
+    filtered_title: int = Field(default=0, description="因标题过滤跳过")
+    filtered_company: int = Field(default=0, description="因公司黑名单跳过")
+    rejected_low_score: int = Field(default=0, description="低分拒绝数")
+    failed_scoring: int = Field(default=0, description="评分失败数")
+    manual_review: int = Field(default=0, description="进入人工复核数")
     success: int = Field(default=0, description="成功投递数")
     skipped: int = Field(default=0, description="跳过数")
     failed: int = Field(default=0, description="失败数")
@@ -206,6 +213,9 @@ class ManualReviewData(BaseModel):
     resume_path: str = Field(..., description="生成的简历路径")
     cl_path: str = Field(..., description="生成的求职信路径")
     cl_text: str = Field(..., description="求职信文本内容")
+    base_resume_label: Optional[str] = Field(None, description="使用的基础简历标签")
+    base_resume_filename: Optional[str] = Field(None, description="使用的基础简历文件名")
+    tailored_resume_filename: Optional[str] = Field(None, description="生成的定制简历文件名")
     decision: Optional[str] = Field(None, description="用户决策")
 
 
@@ -217,6 +227,7 @@ class TaskStatusResponse(BaseModel):
     stats: TaskStats = Field(default_factory=TaskStats, description="统计数据")
     current_job: Optional[CurrentJobInfo] = Field(None, description="当前处理职位")
     manual_review_data: Optional[ManualReviewData] = Field(None, description="人工复核数据")
+    manual_review_queue: List[ManualReviewData] = Field(default=[], description="待人工复核队列")
     last_updated: Optional[datetime] = Field(None, description="最后更新时间")
 
 

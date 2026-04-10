@@ -11,6 +11,7 @@ import CandidateSupportPage from './pages/CandidateSupportPage'
 import ResumeManagerPage from './pages/ResumeManagerPage'
 import EmailSettingsPage from './pages/EmailSettingsPage'
 import MarketIntelligencePage from './pages/MarketIntelligencePage'
+import ManualReviewQueuePage from './pages/ManualReviewQueuePage'
 import Layout from './components/layout/Layout'
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="history" element={<HistoryPage />} />
+          <Route path="manual-review" element={<ManualReviewQueuePage />} />
           <Route path="optimizer" element={<ResumeOptimizerPage />} />
           <Route path="favorites" element={<FavoritesPage />} />
           <Route path="statistics" element={<StatisticsPage />} />

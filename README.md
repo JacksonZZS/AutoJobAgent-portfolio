@@ -206,6 +206,8 @@ GOOGLE_API_KEY=your-google-gemini-api-key
 LLM_MODEL=gemini-3-flash-preview
 ```
 
+`.env` is intentionally not committed. Anyone who clones the repo must copy `.env.example` to `.env` and fill in their own Gemini API key.
+
 ## Public Repository Notes
 
 This repository is intended to be shared as a portfolio project. Real user data, generated resumes, job application outputs, browser profiles, secrets, and local state are intentionally excluded from version control.

@@ -38,6 +38,27 @@ from backend.models.schemas import (
 router = APIRouter(prefix="/jobs", tags=["Job Management"])
 
 
+def infer_resume_variant(resume_path: str | None) -> tuple[str | None, str | None]:
+    """Infer a human-readable base resume label from the selected resume path."""
+    if not resume_path:
+        return None, None
+
+    filename = Path(resume_path).name
+    stem = Path(filename).stem
+
+    if stem.startswith("resume_"):
+        parts = stem.split("_")
+        if len(parts) >= 3:
+            label = "_".join(parts[1:-1]).replace("_", " ").strip()
+            if label:
+                return label, filename
+
+    if stem.startswith("Resume_"):
+        return "Optimized Resume", filename
+
+    return "Base Resume", filename
+
+
 # ============================================================
 # 后台任务函数
 # ============================================================
@@ -91,6 +112,7 @@ def run_job_task(user_id: int, request: StartTaskRequest):
             "resume_text": resume_text,  # 🔴 传入真实简历内容
             "resume_language": "en"
         }
+        base_resume_label, base_resume_filename = infer_resume_variant(request.resume_path)
 
         # 3. 初始化 LLM 引擎
         from core.llm_engine import LLMEngine
@@ -110,8 +132,15 @@ def run_job_task(user_id: int, request: StartTaskRequest):
         target_count = request.target_count
         success_count = 0
         processed_count = 0
+        total_seen_count = 0
         failed_count = 0
         skipped_count = 0
+        filtered_history_count = 0
+        filtered_title_count = 0
+        filtered_company_count = 0
+        rejected_low_score_count = 0
+        failed_scoring_count = 0
+        manual_review_count = 0
 
         # 关键词轮询状态
         keyword_page_map = {kw: 1 for kw in keywords_list}  # 每个关键词当前页码
@@ -320,6 +349,7 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                     continue
 
                 print(f"   📦 抓取到 {len(jobs)} 个职位")
+                total_seen_count += len(jobs)
 
                 # 🔴 处理当前批次的职位
                 for job in jobs:
@@ -356,6 +386,7 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                     if job_link and history_mgr.is_processed(job_link):
                         print(f"   ⏭️  跳过（历史）: {job_title[:30]}...")
                         skipped_count += 1
+                        filtered_history_count += 1
                         continue
 
                     # 🔴 标题排除词过滤（Senior, Manager, Director 等）
@@ -367,6 +398,7 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                             if exclusion.lower() in title_lower:
                                 print(f"   🚫 跳过（标题排除）: {job_title[:30]}... (命中: {exclusion})")
                                 skipped_count += 1
+                                filtered_title_count += 1
                                 excluded = True
                                 break
                         if excluded:
@@ -381,6 +413,7 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                             if blocked.lower() in company_lower:
                                 print(f"   🚫 跳过（公司黑名单）: {job_company} - {job_title[:20]}...")
                                 skipped_count += 1
+                                filtered_company_count += 1
                                 blacklisted = True
                                 break
                         if blacklisted:
@@ -420,6 +453,7 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                         # 判断是否达到阈值
                         if score >= request.score_threshold:
                             print(f"      ✅ 评分合格，准备投递...")
+                            manual_review_count += 1
 
                             # 构造 ApplyJobInfo
                             job_info = ApplyJobInfo(
@@ -537,7 +571,10 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                                 "match_analysis": match_result,
                                 "resume_path": resume_path,
                                 "cl_path": cl_path,
-                                "cl_text": cl_text
+                                "cl_text": cl_text,
+                                "base_resume_label": base_resume_label,
+                                "base_resume_filename": base_resume_filename,
+                                "tailored_resume_filename": Path(resume_path).name if resume_path else None,
                             }
                             status_mgr._write_status(current_data)
                             print(f"      📂 物料已准备完成，等待用户操作...")
@@ -566,10 +603,14 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                                     company=job_company,
                                     status="applied",
                                     score=score,
+                                    resume_path=resume_path,
+                                    cl_path=cl_path,
                                     jd_content=_jd,
                                     location=job.get("location", ""),
                                     salary_raw=_salary.get("raw") if _salary else None,
                                     extracted_skills=_skills,
+                                    base_resume_label=base_resume_label,
+                                    base_resume_filename=base_resume_filename,
                                 )
                             else:
                                 # 用户跳过
@@ -594,10 +635,12 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                                 salary_raw=_salary_low.get("raw") if _salary_low else None,
                                 extracted_skills=_skills_low,
                             )
+                            rejected_low_score_count += 1
                             failed_count += 1
 
                     except Exception as e:
                         print(f"      ❌ 评分失败: {e}")
+                        failed_scoring_count += 1
                         failed_count += 1
 
             # 轮询间隙 - 🔴 关键词/翻页之间必须有延迟，否则 Cloudflare 会重新触发验证
@@ -631,10 +674,16 @@ def run_job_task(user_id: int, request: StartTaskRequest):
                     pass
 
         print(f"\n📊 目标驱动循环完成！")
-        print(f"   总计评分: {processed_count} 个")
+        print(f"   扫描职位: {total_seen_count} 个")
+        print(f"   进入评分: {processed_count} 个")
+        print(f"   人工复核: {manual_review_count} 个")
         print(f"   投递成功: {success_count} 个")
-        print(f"   投递失败: {failed_count} 个")
-        print(f"   跳过: {skipped_count} 个\n")
+        print(f"   低分拒绝: {rejected_low_score_count} 个")
+        print(f"   评分失败: {failed_scoring_count} 个")
+        print(f"   历史跳过: {filtered_history_count} 个")
+        print(f"   标题过滤: {filtered_title_count} 个")
+        print(f"   公司过滤: {filtered_company_count} 个")
+        print(f"   其他跳过: {max(skipped_count - filtered_history_count - filtered_title_count - filtered_company_count, 0)} 个\n")
 
         # 7. 完成
         status_mgr.update(
@@ -646,7 +695,14 @@ def run_job_task(user_id: int, request: StartTaskRequest):
 
         # 更新统计数据
         status_mgr.update_stats(
+            total_seen=total_seen_count,
             total_processed=processed_count,
+            filtered_history=filtered_history_count,
+            filtered_title=filtered_title_count,
+            filtered_company=filtered_company_count,
+            rejected_low_score=rejected_low_score_count,
+            failed_scoring=failed_scoring_count,
+            manual_review=manual_review_count,
             success=success_count,
             skipped=skipped_count,
             failed=failed_count
@@ -770,8 +826,32 @@ async def get_task_status(current_user: UserInfo = Depends(get_current_user)):
             resume_path=review_data.get("resume_path", ""),
             cl_path=review_data.get("cl_path", ""),
             cl_text=review_data.get("cl_text", ""),
+            base_resume_label=review_data.get("base_resume_label"),
+            base_resume_filename=review_data.get("base_resume_filename"),
+            tailored_resume_filename=review_data.get("tailored_resume_filename"),
             decision=review_data.get("decision")
         )
+
+    if data.get("manual_review_queue"):
+        queue_items = []
+        for item in data.get("manual_review_queue", []):
+            queue_items.append(
+                ManualReviewData(
+                    score=item.get("score", 0),
+                    dimensions=[DimensionScore(**dim) for dim in item.get("dimensions", [])],
+                    job_url=item.get("job_url", ""),
+                    job_title=item.get("job_title", ""),
+                    company_name=item.get("company_name", ""),
+                    resume_path=item.get("resume_path", ""),
+                    cl_path=item.get("cl_path", ""),
+                    cl_text=item.get("cl_text", ""),
+                    base_resume_label=item.get("base_resume_label"),
+                    base_resume_filename=item.get("base_resume_filename"),
+                    tailored_resume_filename=item.get("tailored_resume_filename"),
+                    decision=item.get("decision")
+                )
+            )
+        response.manual_review_queue = queue_items
 
     # 添加最后更新时间
     if data.get("last_updated"):
@@ -837,7 +917,11 @@ async def submit_manual_decision(
                 status="skipped_permanent",
                 score=manual_review_data.get("score"),
                 reason="User chose to permanently skip",
+                resume_path=manual_review_data.get("resume_path"),
+                cl_path=manual_review_data.get("cl_path"),
                 location=manual_review_data.get("location", ""),
+                base_resume_label=manual_review_data.get("base_resume_label"),
+                base_resume_filename=manual_review_data.get("base_resume_filename"),
             )
             print(f"[跳过] 已写入历史: {company_name} - {job_title}")
 

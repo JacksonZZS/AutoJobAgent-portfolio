@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 
 class LLMEngine:
     def __init__(self):
-        # 优先读取 GOOGLE_API_KEY
-        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("GOOGLE_API_KEY")
 
         if not api_key:
             raise ValueError("❌ MISSING_API_KEY: Please check your .env file for GOOGLE_API_KEY.")

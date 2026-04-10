@@ -102,7 +102,8 @@ def test_fallback_template():
     # 创建一个会失败的 LLM 引擎
     print("\n使用错误的 API Key 模拟失败...")
 
-    os.environ["ANTHROPIC_API_KEY"] = "invalid_key_for_testing"
+    original_google_api_key = os.environ.get("GOOGLE_API_KEY")
+    os.environ["GOOGLE_API_KEY"] = "invalid_key_for_testing"
 
     try:
         llm = LLMEngine()
@@ -131,6 +132,11 @@ def test_fallback_template():
     except Exception as e:
         print(f"   ❌ 意外错误: {e}")
         return False
+    finally:
+        if original_google_api_key is None:
+            os.environ.pop("GOOGLE_API_KEY", None)
+        else:
+            os.environ["GOOGLE_API_KEY"] = original_google_api_key
 
 
 if __name__ == "__main__":

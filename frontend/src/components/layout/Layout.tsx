@@ -15,6 +15,7 @@ import {
   Briefcase,
   Star,
   History,
+  ClipboardList,
   Brain,
   FileText,
   GraduationCap,
@@ -48,6 +49,7 @@ const navGroups = [
     color: 'from-amber-500 to-orange-500',
     shadowColor: 'shadow-amber-500/30',
     submenu: [
+      { id: 'manual-review', label: '人工复核', href: '/manual-review', icon: ClipboardList },
       { id: 'favorites', label: '我的收藏', href: '/favorites', icon: Star },
       { id: 'history', label: '投递历史', href: '/history', icon: History },
     ]

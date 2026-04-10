@@ -23,11 +23,15 @@ interface ManualReviewData {
   cl_text?: string
   job_url?: string
   job_id?: string
+  base_resume_label?: string
+  base_resume_filename?: string
+  tailored_resume_filename?: string
 }
 
 interface JobReviewCardProps {
   currentJob?: CurrentJob
   manualReviewData?: ManualReviewData
+  queueLength?: number
   loadingPdf: boolean
   onOpenJdSidebar: () => void
   onOpenResumePreview: () => void
@@ -39,6 +43,7 @@ interface JobReviewCardProps {
 export default function JobReviewCard({
   currentJob,
   manualReviewData,
+  queueLength = 0,
   loadingPdf,
   onOpenJdSidebar,
   onOpenResumePreview,
@@ -96,10 +101,25 @@ export default function JobReviewCard({
             <FileText className="w-5 h-5 text-green-600 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-green-700 mb-3">生成的物料</p>
+              {queueLength > 1 && (
+                <p className="text-xs text-green-600 mb-3">
+                  当前待审核队列: {queueLength} 个职位
+                </p>
+              )}
+              {manualReviewData.base_resume_label && (
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
+                  使用简历版本: {manualReviewData.base_resume_label}
+                </div>
+              )}
               <div className="space-y-2">
                 {manualReviewData.resume_path && (
                   <div className="flex items-center justify-between p-3 bg-white/60 rounded-lg">
-                    <span className="text-sm text-green-700 font-medium">定制化简历</span>
+                    <div>
+                      <span className="text-sm text-green-700 font-medium">定制化简历</span>
+                      {manualReviewData.tailored_resume_filename && (
+                        <p className="text-xs text-slate-500 mt-1">{manualReviewData.tailored_resume_filename}</p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={onOpenResumePreview}
